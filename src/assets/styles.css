@@ -61,8 +61,6 @@
   max-width: 800px;
   margin: 0 auto;
   padding: 20px;
-  height: 100vh;
-  overflow-y: auto;
 }
 
 /* 错误字符样式 */
@@ -195,6 +193,23 @@
 .guess-button:disabled {
   background-color: #ccc;
   cursor: not-allowed;
+}
+
+.end-game-button {
+  height: 40px;
+  padding: 0 20px;
+  margin-left: 10px;
+  background-color: #f56c6c;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.end-game-button:hover {
+  background-color: #f78989;
 }
 
 /* 错误标题样式 */

@@ -1,35 +1,22 @@
 <template>
   <div class="game-container">
-    <!-- 文件上传区域 -->
-    <div v-if="!gameState.content" class="upload-card">
-      <div class="card-header">上传百科文本文件</div>
-      <div
-        class="upload-area"
-        :class="{ 'drag-over': isDragOver }"
-        @drop.prevent="handleDrop"
-        @dragover.prevent="handleDragOver"
-        @dragleave.prevent="handleDragLeave"
-        @click="triggerFileInput"
-      >
-        <div class="upload-icon">📁</div>
-        <div class="upload-text">
-          将txt文件拖到此处，或<em>点击上传</em>
-        </div>
-        <div class="upload-tip">
-          文本格式：第一行为标题，其余为正文内容
-        </div>
-      </div>
-      <input
-        type="file"
-        ref="fileInput"
-        accept=".txt"
-        style="display: none"
-        @change="handleFileSelect"
-      >
+    <!-- 游戏设置中 -->
+    <div v-if="!gameState.gameStarted" class="setup-screen">
+      <div class="loading">加载中...</div>
     </div>
 
-    <!-- 游戏区域 -->
+    <!-- 游戏进行中 -->
     <div v-else class="game-area">
+      <!-- 当前玩家提示 -->
+      <div v-if="!gameState.isGameComplete && gameState.players.length > 1" class="current-player">
+        <div class="player-indicator">
+          当前玩家：<span class="player-name">{{ currentPlayer.name }}</span>
+        </div>
+        <div class="turn-indicator" v-if="gameState.hasExtraTurn">
+          <span class="extra-turn">获得额外回合！</span>
+        </div>
+      </div>
+
       <!-- 标题区域 -->
       <div class="article-title monospace">
         <span
@@ -72,6 +59,28 @@
         >
           提交
         </button>
+        <button
+          class="end-game-button"
+          @click="endGameManually"
+        >
+          结束游戏
+        </button>
+      </div>
+
+      <!-- 玩家分数 -->
+      <div v-if="gameState.players.length > 1" class="scores">
+        <h3>玩家得分</h3>
+        <div class="score-list">
+          <div
+            v-for="player in gameState.players"
+            :key="player.id"
+            class="score-item"
+            :class="{ active: player.id === currentPlayer.id }"
+          >
+            <span class="score-name">{{ player.name }}</span>
+            <span class="score-value">{{ player.score }}</span>
+          </div>
+        </div>
       </div>
 
       <!-- 错误字符显示 -->
@@ -88,9 +97,26 @@
 
       <!-- 游戏完成提示 -->
       <div v-if="gameState.isGameComplete" class="game-complete">
-        <h2>🎉 恭喜你完成了游戏！</h2>
-        <p>你已成功猜出标题中的所有文字</p>
-        <button class="reset-button" @click="resetGame">重新开始</button>
+        <h2>🎉 游戏结束！</h2>
+        <p v-if="gameState.isManuallyEnded">
+          游戏已手动结束，以下是完整文章内容
+        </p>
+        <p v-else-if="gameState.winner">
+          获胜者：<strong>{{ gameState.winner.name }}</strong>
+        </p>
+        <p v-else>
+          标题已被完全揭示！
+        </p>
+        <div v-if="gameState.players.length > 1 && !gameState.isManuallyEnded" class="final-scores">
+          <h3>最终得分</h3>
+          <div class="final-score-list">
+            <div v-for="player in gameState.players" :key="player.id" class="final-score-item">
+              <span>{{ player.name }}</span>
+              <span>{{ player.score }} 分</span>
+            </div>
+          </div>
+        </div>
+        <button class="reset-button" @click="backToHome">返回首页</button>
       </div>
     </div>
 
@@ -107,17 +133,17 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, reactive, watch } from 'vue'
-import { processText, checkGameComplete } from '@/utils/textProcessor'
-import { GameState } from '@/types/game'
+import { defineComponent, ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { processText, checkGameComplete, isSymbol } from '@/utils/textProcessor'
+import { GameState, Player } from '@/types/game'
 
 export default defineComponent({
   name: 'GameView',
   setup() {
-    const fileInput = ref<HTMLInputElement | null>(null)
+    const router = useRouter()
     const guessInput = ref('')
     const isGuessing = ref(false)
-    const isDragOver = ref(false)
 
     const message = reactive({
       show: false,
@@ -126,19 +152,25 @@ export default defineComponent({
     })
 
     const gameState = reactive<GameState>({
+      players: [],
+      currentPlayerIndex: 0,
+      gameStarted: false,
+      fileContent: '',
       title: '',
       content: '',
       titleChars: [],
       contentChars: [],
       guessedChars: new Set(),
       errorChars: new Set(),
-      isGameComplete: false
+      isGameComplete: false,
+      hasExtraTurn: false,
+      isManuallyEnded: false
     })
 
-    // 监听gameState变化
-    watch(() => gameState.content, (newVal) => {
-      console.log('gameState.content changed:', newVal)
-    }, { deep: true })
+    // 当前玩家
+    const currentPlayer = computed(() => {
+      return gameState.players[gameState.currentPlayerIndex] || { name: '', score: 0 }
+    })
 
     // 显示消息
     const showMessage = (text: string, type: 'success' | 'warning' | 'error' = 'success') => {
@@ -150,77 +182,29 @@ export default defineComponent({
       }, 3000)
     }
 
-    // 触发文件选择
-    const triggerFileInput = () => {
-      fileInput.value?.click()
-    }
-
-    // 处理文件拖拽
-    const handleDragOver = () => {
-      isDragOver.value = true
-    }
-
-    const handleDragLeave = () => {
-      isDragOver.value = false
-    }
-
-    const handleDrop = (e: DragEvent) => {
-      isDragOver.value = false
-      const files = e.dataTransfer?.files
-      if (files && files.length > 0) {
-        handleFile(files[0])
-      }
-    }
-
-    // 处理文件选择
-    const handleFileSelect = (e: Event) => {
-      const target = e.target as HTMLInputElement
-      if (target.files && target.files.length > 0) {
-        handleFile(target.files[0])
-      }
-    }
-
-    // 处理文件
-    const handleFile = (file: File) => {
-      if (!file.name.endsWith('.txt')) {
-        showMessage('请上传txt格式的文件', 'error')
+    // 初始化游戏
+    const initGame = () => {
+      const gameData = sessionStorage.getItem('gameData')
+      if (!gameData) {
+        router.push('/')
         return
       }
 
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const text = e.target?.result as string
-        processFileContent(text)
-      }
-      reader.readAsText(file, 'UTF-8')
-    }
+      const { fileContent, players } = JSON.parse(gameData)
+      gameState.fileContent = fileContent
+      gameState.players = players
 
-    // 处理文件内容
-    const processFileContent = (text: string) => {
-      console.log('文件内容:', text)
-      const lines = text.split('\n').filter(line => line.trim())
-      console.log('分割后的行数:', lines.length)
-
-      if (lines.length === 0) {
-        showMessage('文件为空', 'error')
-        return
-      }
-
+      // 处理文件内容
+      const lines = fileContent.split('\n').filter(line => line.trim())
       gameState.title = lines[0].trim()
-      // 如果只有一行，将整行内容作为正文
       gameState.content = lines.length > 1 ? lines.slice(1).join('\n').trim() : ''
-      console.log('标题:', gameState.title)
-      console.log('正文长度:', gameState.content.length)
 
-      // 处理标题和正文的字符
+      // 处理字符
       gameState.titleChars = processText(gameState.title)
       gameState.contentChars = processText(gameState.content)
-      console.log('标题字符数:', gameState.titleChars.length)
-      console.log('正文字符数:', gameState.contentChars.length)
-      console.log('gameState.content:', gameState.content)
 
-      // 即使没有正文，标题也可以用于猜字游戏
-      showMessage('文件加载成功，开始游戏吧！')
+      gameState.gameStarted = true
+      showMessage('游戏开始！')
     }
 
     // 处理猜字
@@ -230,15 +214,18 @@ export default defineComponent({
 
       isGuessing.value = true
 
-      // 检查是否已经猜过
-      if (gameState.guessedChars.has(char)) {
-        showMessage(`"${char}" 已经猜对了，它在文章中`, 'warning')
+      // 检查是否为符号
+      if (isSymbol(char)) {
+        showMessage('符号不能作为猜测内容', 'warning')
         guessInput.value = ''
         isGuessing.value = false
         return
       }
-      if (gameState.errorChars.has(char)) {
-        showMessage(`"${char}" 已经猜过了，但不在文章中`, 'warning')
+
+      // 检查是否已经猜过
+      if (gameState.guessedChars.has(char) || gameState.errorChars.has(char)) {
+        const isCorrect = gameState.guessedChars.has(char)
+        showMessage(isCorrect ? `"${char}" 已经猜对了，它在文章中` : `"${char}" 已经猜过了，但不在文章中`, 'warning')
         guessInput.value = ''
         isGuessing.value = false
         return
@@ -246,12 +233,14 @@ export default defineComponent({
 
       // 检查文字是否在文章中
       let isFound = false
+      let foundInTitle = false
 
       // 检查标题
       gameState.titleChars.forEach(charInfo => {
         if (charInfo.char === char && !charInfo.isSymbol) {
           charInfo.isRevealed = true
           isFound = true
+          foundInTitle = true
         }
       })
 
@@ -265,49 +254,230 @@ export default defineComponent({
 
       if (isFound) {
         gameState.guessedChars.add(char)
-        showMessage(`猜对了！"${char}" 在文章中出现了`)
+
+        // 增加当前玩家分数
+        currentPlayer.value.score++
+
+        let messageText = `猜对了！"${char}" 在文章中出现了`
+
+        // 如果猜中标题中的字，获得额外回合
+        if (foundInTitle) {
+          gameState.hasExtraTurn = true
+          messageText += '，获得额外回合！'
+        }
+
+        showMessage(messageText)
 
         // 检查游戏是否完成
         gameState.isGameComplete = checkGameComplete(gameState.titleChars)
         if (gameState.isGameComplete) {
-          showMessage('恭喜你完成了游戏！')
+          gameState.winner = currentPlayer.value
+          showMessage(`恭喜 ${gameState.winner.name} 获得胜利！`)
+        } else if (!gameState.hasExtraTurn) {
+          // 没有额外回合，切换到下一个玩家
+          nextPlayer()
         }
       } else {
         gameState.errorChars.add(char)
         showMessage(`"${char}" 不在文章中`, 'error')
+        // 猜错了，切换到下一个玩家
+        nextPlayer()
       }
 
       guessInput.value = ''
       isGuessing.value = false
     }
 
-    // 重置游戏
-    const resetGame = () => {
-      gameState.title = ''
-      gameState.content = ''
-      gameState.titleChars = []
-      gameState.contentChars = []
-      gameState.guessedChars.clear()
-      gameState.errorChars.clear()
-      gameState.isGameComplete = false
-      guessInput.value = ''
+    // 切换到下一个玩家
+    const nextPlayer = () => {
+      gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length
+      gameState.hasExtraTurn = false
     }
 
+    // 手动结束游戏
+    const endGameManually = () => {
+      // 显示所有文字
+      gameState.titleChars.forEach(charInfo => {
+        if (!charInfo.isSymbol) {
+          charInfo.isRevealed = true
+        }
+      })
+      gameState.contentChars.forEach(charInfo => {
+        if (!charInfo.isSymbol) {
+          charInfo.isRevealed = true
+        }
+      })
+
+      gameState.isManuallyEnded = true
+      gameState.isGameComplete = true
+      showMessage('游戏已结束，显示完整文章')
+    }
+
+    // 返回首页
+    const backToHome = () => {
+      sessionStorage.removeItem('gameData')
+      router.push('/')
+    }
+
+    onMounted(() => {
+      initGame()
+    })
+
     return {
-      fileInput,
       gameState,
       guessInput,
       isGuessing,
-      isDragOver,
+      currentPlayer,
       message,
-      triggerFileInput,
-      handleDragOver,
-      handleDragLeave,
-      handleDrop,
-      handleFileSelect,
       handleGuess,
-      resetGame
+      endGameManually,
+      backToHome
     }
   }
 })
 </script>
+
+<style scoped>
+.setup-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-size: 24px;
+  color: #666;
+}
+
+.current-player {
+  text-align: center;
+  margin-bottom: 20px;
+  padding: 12px;
+  background: #f0f9ff;
+  border-radius: 8px;
+}
+
+.player-indicator {
+  font-size: 18px;
+  color: #333;
+}
+
+.player-name {
+  color: #409eff;
+  font-weight: bold;
+}
+
+.turn-indicator {
+  margin-top: 8px;
+}
+
+.extra-turn {
+  color: #67c23a;
+  font-weight: bold;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+.scores {
+  margin-top: 30px;
+  padding: 16px;
+  background: #f5f7fa;
+  border-radius: 8px;
+}
+
+.scores h3 {
+  margin-bottom: 12px;
+  color: #333;
+}
+
+.score-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.score-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  background: white;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  transition: all 0.3s;
+}
+
+.score-item.active {
+  border-color: #409eff;
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.2);
+}
+
+.score-name {
+  margin-right: 12px;
+  color: #333;
+}
+
+.score-value {
+  font-weight: bold;
+  color: #409eff;
+  font-size: 18px;
+}
+
+.game-complete p {
+  margin: 10px 0;
+  color: #666;
+}
+
+.game-complete strong {
+  color: #67c23a;
+  font-size: 24px;
+}
+
+.reset-button {
+  margin-top: 20px;
+  background: #409eff;
+}
+
+.reset-button:hover {
+  background: #66b1ff;
+}
+
+.final-scores {
+  margin: 20px 0;
+  padding: 16px;
+  background: #f5f7fa;
+  border-radius: 8px;
+}
+
+.final-scores h3 {
+  margin-bottom: 12px;
+  color: #333;
+  text-align: center;
+}
+
+.final-score-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.final-score-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: white;
+  border-radius: 6px;
+  font-size: 16px;
+}
+
+.final-score-item span:first-child {
+  color: #333;
+}
+
+.final-score-item span:last-child {
+  color: #409eff;
+  font-weight: bold;
+}
+</style>
