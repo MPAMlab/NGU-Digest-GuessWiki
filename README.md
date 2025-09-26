@@ -2,6 +2,8 @@
 
 一个有趣的猜字游戏，读取百科文本内容，将所有文字隐藏为黑方块，通过猜字来逐步揭示内容。
 
+本项目由 Claude Code + GLM-4 完成。
+
 ## 游戏特色
 
 - 支持单人和多人对战模式（2-6人）
@@ -76,7 +78,9 @@ src/
 
 (c) NGU Team, MPAM Laboratory. 本项目为 NGU Digest 视频企划中使用的内容，点此访问[GitHub Repo](https://github.com/mpamlab/NGU-Digest-GuessWiki)
 
-本项目灵感来源：https://xiaoce.fun/baike/，本企划灵感来源：https://www.youtube.com/watch?v=JXl7-xxhGso
+本项目灵感来源：https://xiaoce.fun/baike/
+
+本企划灵感来源：https://www.youtube.com/watch?v=JXl7-xxhGso
 
 更多内容请参考本企划 [GitHub文档](https://github.com/MPAMlab/NGU-Digest-Documentation)
 
