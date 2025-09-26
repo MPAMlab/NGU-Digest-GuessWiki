@@ -1,0 +1,85 @@
+// 全局样式
+
+// 等宽字体设置
+.monospace {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  letter-spacing: 0.1em;
+}
+
+// 文字方块样式
+.char-block {
+  display: inline-block;
+  width: 1.2em;
+  height: 1.2em;
+  line-height: 1.2;
+  text-align: center;
+  margin: 0 0.1em;
+  vertical-align: middle;
+  transition: all 0.3s ease;
+
+  &.hidden {
+    background-color: #333;
+    border-radius: 2px;
+    cursor: pointer;
+
+    &:hover {
+      background-color: #555;
+      transform: scale(1.1);
+    }
+  }
+
+  &.revealed {
+    background-color: transparent;
+    color: #333;
+    font-weight: bold;
+    animation: reveal 0.5s ease;
+  }
+}
+
+@keyframes reveal {
+  0% {
+    transform: rotateY(180deg);
+    opacity: 0;
+  }
+  100% {
+    transform: rotateY(0);
+    opacity: 1;
+  }
+}
+
+// 游戏容器
+.game-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+// 错误字符样式
+.error-chars {
+  margin-top: 20px;
+
+  .error-tag {
+    margin: 5px;
+    background-color: #f56c6c;
+    color: white;
+  }
+}
+
+// 标题样式
+.article-title {
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #409eff;
+}
+
+// 正文样式
+.article-content {
+  font-size: 16px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

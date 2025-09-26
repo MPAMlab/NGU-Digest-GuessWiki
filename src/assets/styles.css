@@ -1,0 +1,273 @@
+/* 全局样式 */
+
+/* 等宽字体设置 */
+.monospace {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  letter-spacing: 0.1em;
+}
+
+/* 文字方块样式 */
+.char-block {
+  display: inline-block;
+  width: 1.2em;
+  height: 1.2em;
+  line-height: 1.2;
+  text-align: center;
+  margin: 0 0.1em;
+  vertical-align: middle;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.char-block.hidden {
+  background-color: #333;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.char-block.hidden:hover {
+  background-color: #555;
+  transform: scale(1.1);
+}
+
+.char-block.revealed {
+  background-color: transparent;
+  color: #333;
+  font-weight: bold;
+  animation: reveal 0.5s ease;
+}
+
+/* 确保空内容也有占位 */
+.char-block.hidden::after {
+  content: '';
+  display: inline-block;
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes reveal {
+  0% {
+    transform: rotateY(180deg);
+    opacity: 0;
+  }
+  100% {
+    transform: rotateY(0);
+    opacity: 1;
+  }
+}
+
+/* 游戏容器 */
+.game-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+/* 错误字符样式 */
+.error-chars {
+  margin-top: 20px;
+}
+
+.error-tag {
+  display: inline-block;
+  margin: 5px;
+  padding: 4px 8px;
+  background-color: #f56c6c;
+  color: white;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+/* 标题样式 */
+.article-title {
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #409eff;
+}
+
+/* 正文样式 */
+.article-content {
+  font-size: 16px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* 上传区域样式 */
+.upload-card {
+  max-width: 500px;
+  margin: 100px auto;
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 20px;
+}
+
+.upload-area {
+  border: 2px dashed #ddd;
+  border-radius: 8px;
+  padding: 40px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.3s;
+}
+
+.upload-area:hover {
+  border-color: #409eff;
+}
+
+.upload-area.drag-over {
+  border-color: #409eff;
+  background-color: #f0f9ff;
+}
+
+.upload-icon {
+  font-size: 48px;
+  color: #999;
+  margin-bottom: 16px;
+}
+
+.upload-text {
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.upload-text em {
+  color: #409eff;
+  font-style: normal;
+}
+
+.upload-tip {
+  font-size: 12px;
+  color: #999;
+  margin-top: 8px;
+}
+
+/* 输入框样式 */
+.guess-area {
+  margin-top: 30px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.guess-input {
+  width: 200px;
+  height: 40px;
+  padding: 0 15px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 16px;
+  outline: none;
+  transition: border-color 0.3s;
+}
+
+.guess-input:focus {
+  border-color: #409eff;
+}
+
+.guess-button {
+  height: 40px;
+  padding: 0 20px;
+  background-color: #409eff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.guess-button:hover:not(:disabled) {
+  background-color: #66b1ff;
+}
+
+.guess-button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+/* 错误标题样式 */
+.error-title {
+  margin-bottom: 10px;
+  color: #f56c6c;
+  font-weight: bold;
+}
+
+/* 游戏完成样式 */
+.game-complete {
+  text-align: center;
+  padding: 40px;
+}
+
+.game-complete h2 {
+  color: #67c23a;
+  margin-bottom: 10px;
+}
+
+.game-complete p {
+  color: #666;
+  margin-bottom: 20px;
+}
+
+.reset-button {
+  padding: 10px 30px;
+  background-color: #67c23a;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.reset-button:hover {
+  background-color: #85ce61;
+}
+
+/* 消息提示样式 */
+.message {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 24px;
+  border-radius: 4px;
+  color: white;
+  font-size: 14px;
+  z-index: 1000;
+  animation: slideDown 0.3s ease;
+}
+
+.message.success {
+  background-color: #67c23a;
+}
+
+.message.warning {
+  background-color: #e6a23c;
+}
+
+.message.error {
+  background-color: #f56c6c;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translate(-50%, -100%);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
