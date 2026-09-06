@@ -60,11 +60,19 @@
           <label>视窗预设:</label>
           <button
             class="btn btn-xs"
-            :class="{ active: boxHeight === 540 }"
+            :class="{ active: boxHeight === 540 && !isNativeBoarderHeight }"
             @click="setBoxHeight(540)"
             title="1080p视频半屏高 (1920x540)"
           >
             540p半屏
+          </button>
+          <button
+            class="btn btn-xs"
+            :class="{ active: isNativeBoarderHeight }"
+            @click="setBoarderNativeSize"
+            title="题目边框原生高度 (1920x500 呈现区)"
+          >
+            500p边框原生
           </button>
           <button
             class="btn btn-xs"
@@ -81,6 +89,26 @@
             title="自动适应文本内容高度"
           >
             自适应
+          </button>
+        </div>
+
+        <!-- 边框与纯净录屏切换 -->
+        <div class="border-controls">
+          <button
+            class="btn btn-xs"
+            :class="{ active: showBoarder }"
+            @click="showBoarder = !showBoarder"
+            title="切换题目周边 SVG 装饰边框"
+          >
+            🖼️ 题目边框: {{ showBoarder ? '开' : '关' }}
+          </button>
+          <button
+            class="btn btn-xs"
+            :class="{ active: hideIndicators }"
+            @click="hideIndicators = !hideIndicators"
+            title="隐藏区域顶部标签栏，录制纯净无遮挡画面"
+          >
+            🏷️ 纯净录屏: {{ hideIndicators ? '开' : '关' }}
           </button>
         </div>
 
@@ -218,14 +246,20 @@
           <!-- 1. 上半部分：呈现区（黑方块遮罩模式，模拟视频画面） -->
           <section
             class="box-part up-part"
+            :class="{ 'has-boarder': showBoarder }"
             :style="{ height: `${upPartHeight}px`, fontSize: `${fontSize}px` }"
           >
-            <div class="part-indicator">
-              <span class="indicator-tag tag-game">📺 视频呈现区 (Game View - Black Squares)</span>
-              <span class="indicator-info">宽: 1920px | 高: {{ upPartHeight }}px | 字体: Noto Sans SC</span>
+            <!-- 题目边框装饰图层 (Question Boarder SVG) -->
+            <div v-if="showBoarder" class="question-boarder-layer">
+              <img :src="questionBoarderSvg" class="boarder-svg-img" alt="Question Border Frame" />
             </div>
 
-            <div class="text-content-scroll" :style="textScrollStyle">
+            <div v-if="!hideIndicators" class="part-indicator">
+              <span class="indicator-tag tag-game">📺 视频呈现区 (Game View - Black Squares)</span>
+              <span class="indicator-info">宽: 1920px | 高: {{ upPartHeight }}px | 边框: {{ showBoarder ? '开启' : '关闭' }}</span>
+            </div>
+
+            <div class="text-content-scroll" :class="{ 'with-boarder': showBoarder }" :style="textScrollStyle">
               <!-- 文章标题 -->
               <h2 class="article-title-block">
                 <template v-for="(charInfo, idx) in titleChars" :key="`up-title-${idx}`">
@@ -302,7 +336,7 @@
             class="box-part down-part"
             :style="{ height: `${downPartHeight}px`, fontSize: `${fontSize}px` }"
           >
-            <div class="part-indicator">
+            <div v-if="!hideIndicators" class="part-indicator">
               <span class="indicator-tag tag-god">👑 上帝视角参考区 (God View - Clickable Uncovered Text)</span>
               <span class="indicator-info">宽: 1920px | 高: {{ downPartHeight }}px | 点击任意明文揭示/隐藏全部相同字</span>
             </div>
@@ -389,6 +423,7 @@
 import { defineComponent, ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { isSymbol, processText } from '@/utils/textProcessor'
 import { CharInfo } from '@/types/game'
+import questionBoarderSvg from '@/assets/question-boarder.svg'
 
 export default defineComponent({
   name: 'GodModeView',
@@ -408,6 +443,10 @@ export default defineComponent({
     const contentText = ref('')
     const titleChars = ref<CharInfo[]>([])
     const contentChars = ref<CharInfo[]>([])
+
+    // 题目边框与录屏指示器配置
+    const showBoarder = ref(true)
+    const hideIndicators = ref(false)
 
     // 已揭示的字符集合（统一转小写规范匹配，英文字母大小写全解，中文字符直接匹配）
     const revealedCharSet = ref<Set<string>>(new Set())
@@ -433,6 +472,19 @@ export default defineComponent({
     const upPartHeight = ref(260)
     const downPartHeight = ref(264)
     const isAutoHeight = ref(false)
+
+    const isNativeBoarderHeight = computed(() => {
+      return upPartHeight.value === 500 && showBoarder.value
+    })
+
+    const setBoarderNativeSize = () => {
+      showBoarder.value = true
+      isAutoHeight.value = false
+      upPartHeight.value = 500
+      downPartHeight.value = 280
+      boxHeight.value = 500 + 280 + DIVIDER_HEIGHT
+      showToast('已调整为题目边框原生高度 (呈现区 1920x500)')
+    }
 
     // 缩放模式与自适应缩放计算
     const zoomMode = ref<'fit' | '100' | '75' | '50'>('fit')
@@ -900,6 +952,11 @@ export default defineComponent({
       hideAll,
       undo,
       redo,
+      showBoarder,
+      hideIndicators,
+      questionBoarderSvg,
+      isNativeBoarderHeight,
+      setBoarderNativeSize,
       setBoxHeight,
       toggleAutoHeight,
       onBoxHeightInputChange,
@@ -1301,6 +1358,70 @@ select {
   line-height: 1.8;
   letter-spacing: 0.06em;
   box-sizing: border-box;
+}
+
+/* 题目外框图层 (Question Boarder SVG Layer) */
+.question-boarder-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.boarder-svg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  display: block;
+}
+
+.box-part.up-part {
+  position: relative;
+}
+
+.box-part.up-part .part-indicator {
+  position: relative;
+  z-index: 10;
+}
+
+.box-part.up-part .text-content-scroll {
+  position: relative;
+  z-index: 5;
+}
+
+/* 带有边框时的内边距，确保文字严格位于 1920x500 内框中 */
+.text-content-scroll.with-boarder {
+  padding: 40px 76px 28px 76px;
+}
+
+.up-part.has-boarder {
+  background-color: transparent !important;
+}
+
+.up-part.has-boarder .article-title-block {
+  border-bottom: 2px solid rgba(115, 10, 14, 0.35);
+  color: #2b080b;
+}
+
+.up-part.has-boarder .article-body-block {
+  color: #2b080b;
+}
+
+.up-part.has-boarder .char-block.hidden {
+  background-color: #221215;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.up-part.has-boarder .char-block.hidden:hover {
+  background-color: #4a1f26;
+}
+
+.up-part.has-boarder .char-block.revealed {
+  color: #221215;
 }
 
 .article-title-block {
