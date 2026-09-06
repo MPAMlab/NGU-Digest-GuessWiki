@@ -199,6 +199,30 @@
       </div>
 
       <div class="sub-item">
+        <label>垂直居中:</label>
+        <button
+          class="btn btn-xs toggle-action-btn"
+          :class="{ active: isVerticalCenter }"
+          @click="isVerticalCenter = !isVerticalCenter"
+          title="切换文字在框内是否垂直居中"
+        >
+          {{ isVerticalCenter ? '↕️ 垂直居中: 开' : '↕️ 垂直居中: 关' }}
+        </button>
+      </div>
+
+      <div class="sub-item">
+        <label>文本对齐:</label>
+        <button
+          class="btn btn-xs toggle-action-btn"
+          :class="{ active: textAlign === 'center' }"
+          @click="textAlign = textAlign === 'center' ? 'left' : 'center'"
+          title="切换水平对齐方式"
+        >
+          {{ textAlign === 'center' ? '↔️ 水平居中' : '⬅️ 靠左对齐' }}
+        </button>
+      </div>
+
+      <div class="sub-item">
         <label>点击操作:</label>
         <button
           class="btn btn-xs toggle-action-btn"
@@ -267,58 +291,60 @@
             </div>
 
             <div class="text-content-scroll" :class="{ 'with-boarder': showBoarder }" :style="textScrollStyle">
-              <!-- 文章标题 -->
-              <h2 class="article-title-block">
-                <template v-for="(charInfo, idx) in titleChars" :key="`up-title-${idx}`">
-                  <br v-if="charInfo.char === '\n'" />
-                  <span
-                    v-else-if="charInfo.isSymbol"
-                    class="char-symbol"
-                    :style="charMarginStyle"
-                  >{{ charInfo.char === ' ' ? '&nbsp;' : charInfo.char }}</span>
-                  <span
-                    v-else
-                    class="char-block"
-                    :class="{
-                      hidden: !isCharRevealed(charInfo.char),
-                      revealed: isCharRevealed(charInfo.char),
-                      'is-hover-match': isMatchHover(charInfo.char)
-                    }"
-                    :style="charMarginStyle"
-                    @click="handleCharClick(charInfo.char)"
-                    @mouseenter="setHoveredChar(charInfo.char)"
-                    @mouseleave="clearHoveredChar"
-                  >
-                    {{ isCharRevealed(charInfo.char) ? charInfo.char : '' }}
-                  </span>
-                </template>
-              </h2>
+              <div class="text-inner-container" :class="{ 'is-v-centered': isVerticalCenter }">
+                <!-- 文章标题 -->
+                <h2 class="article-title-block">
+                  <template v-for="(charInfo, idx) in titleChars" :key="`up-title-${idx}`">
+                    <br v-if="charInfo.char === '\n'" />
+                    <span
+                      v-else-if="charInfo.isSymbol"
+                      class="char-symbol"
+                      :style="charMarginStyle"
+                    >{{ charInfo.char === ' ' ? '&nbsp;' : charInfo.char }}</span>
+                    <span
+                      v-else
+                      class="char-block"
+                      :class="{
+                        hidden: !isCharRevealed(charInfo.char),
+                        revealed: isCharRevealed(charInfo.char),
+                        'is-hover-match': isMatchHover(charInfo.char)
+                      }"
+                      :style="charMarginStyle"
+                      @click="handleCharClick(charInfo.char)"
+                      @mouseenter="setHoveredChar(charInfo.char)"
+                      @mouseleave="clearHoveredChar"
+                    >
+                      {{ isCharRevealed(charInfo.char) ? charInfo.char : '' }}
+                    </span>
+                  </template>
+                </h2>
 
-              <!-- 文章正文 -->
-              <div class="article-body-block">
-                <template v-for="(charInfo, idx) in contentChars" :key="`up-content-${idx}`">
-                  <br v-if="charInfo.char === '\n'" />
-                  <span
-                    v-else-if="charInfo.isSymbol"
-                    class="char-symbol"
-                    :style="charMarginStyle"
-                  >{{ charInfo.char === ' ' ? '&nbsp;' : charInfo.char }}</span>
-                  <span
-                    v-else
-                    class="char-block"
-                    :class="{
-                      hidden: !isCharRevealed(charInfo.char),
-                      revealed: isCharRevealed(charInfo.char),
-                      'is-hover-match': isMatchHover(charInfo.char)
-                    }"
-                    :style="charMarginStyle"
-                    @click="handleCharClick(charInfo.char)"
-                    @mouseenter="setHoveredChar(charInfo.char)"
-                    @mouseleave="clearHoveredChar"
-                  >
-                    {{ isCharRevealed(charInfo.char) ? charInfo.char : '' }}
-                  </span>
-                </template>
+                <!-- 文章正文 -->
+                <div class="article-body-block">
+                  <template v-for="(charInfo, idx) in contentChars" :key="`up-content-${idx}`">
+                    <br v-if="charInfo.char === '\n'" />
+                    <span
+                      v-else-if="charInfo.isSymbol"
+                      class="char-symbol"
+                      :style="charMarginStyle"
+                    >{{ charInfo.char === ' ' ? '&nbsp;' : charInfo.char }}</span>
+                    <span
+                      v-else
+                      class="char-block"
+                      :class="{
+                        hidden: !isCharRevealed(charInfo.char),
+                        revealed: isCharRevealed(charInfo.char),
+                        'is-hover-match': isMatchHover(charInfo.char)
+                      }"
+                      :style="charMarginStyle"
+                      @click="handleCharClick(charInfo.char)"
+                      @mouseenter="setHoveredChar(charInfo.char)"
+                      @mouseleave="clearHoveredChar"
+                    >
+                      {{ isCharRevealed(charInfo.char) ? charInfo.char : '' }}
+                    </span>
+                  </template>
+                </div>
               </div>
             </div>
           </section>
@@ -344,58 +370,60 @@
             :style="{ height: `${downPartHeight}px`, fontSize: `${fontSize}px` }"
           >
             <div class="text-content-scroll" :style="textScrollStyle">
-              <!-- 文章标题 -->
-              <h2 class="article-title-block">
-                <template v-for="(charInfo, idx) in titleChars" :key="`down-title-${idx}`">
-                  <br v-if="charInfo.char === '\n'" />
-                  <span
-                    v-else-if="charInfo.isSymbol"
-                    class="char-symbol"
-                    :style="charMarginStyle"
-                  >{{ charInfo.char === ' ' ? '&nbsp;' : charInfo.char }}</span>
-                  <span
-                    v-else
-                    class="god-char-block"
-                    :class="{
-                      'is-revealed': isCharRevealed(charInfo.char),
-                      'is-hidden': !isCharRevealed(charInfo.char),
-                      'is-hover-match': isMatchHover(charInfo.char)
-                    }"
-                    :style="charMarginStyle"
-                    @click="handleCharClick(charInfo.char)"
-                    @mouseenter="setHoveredChar(charInfo.char)"
-                    @mouseleave="clearHoveredChar"
-                  >
-                    {{ charInfo.char }}
-                  </span>
-                </template>
-              </h2>
+              <div class="text-inner-container" :class="{ 'is-v-centered': isVerticalCenter }">
+                <!-- 文章标题 -->
+                <h2 class="article-title-block">
+                  <template v-for="(charInfo, idx) in titleChars" :key="`down-title-${idx}`">
+                    <br v-if="charInfo.char === '\n'" />
+                    <span
+                      v-else-if="charInfo.isSymbol"
+                      class="char-symbol"
+                      :style="charMarginStyle"
+                    >{{ charInfo.char === ' ' ? '&nbsp;' : charInfo.char }}</span>
+                    <span
+                      v-else
+                      class="god-char-block"
+                      :class="{
+                        'is-revealed': isCharRevealed(charInfo.char),
+                        'is-hidden': !isCharRevealed(charInfo.char),
+                        'is-hover-match': isMatchHover(charInfo.char)
+                      }"
+                      :style="charMarginStyle"
+                      @click="handleCharClick(charInfo.char)"
+                      @mouseenter="setHoveredChar(charInfo.char)"
+                      @mouseleave="clearHoveredChar"
+                    >
+                      {{ charInfo.char }}
+                    </span>
+                  </template>
+                </h2>
 
-              <!-- 文章正文 -->
-              <div class="article-body-block">
-                <template v-for="(charInfo, idx) in contentChars" :key="`down-content-${idx}`">
-                  <br v-if="charInfo.char === '\n'" />
-                  <span
-                    v-else-if="charInfo.isSymbol"
-                    class="char-symbol"
-                    :style="charMarginStyle"
-                  >{{ charInfo.char === ' ' ? '&nbsp;' : charInfo.char }}</span>
-                  <span
-                    v-else
-                    class="god-char-block"
-                    :class="{
-                      'is-revealed': isCharRevealed(charInfo.char),
-                      'is-hidden': !isCharRevealed(charInfo.char),
-                      'is-hover-match': isMatchHover(charInfo.char)
-                    }"
-                    :style="charMarginStyle"
-                    @click="handleCharClick(charInfo.char)"
-                    @mouseenter="setHoveredChar(charInfo.char)"
-                    @mouseleave="clearHoveredChar"
-                  >
-                    {{ charInfo.char }}
-                  </span>
-                </template>
+                <!-- 文章正文 -->
+                <div class="article-body-block">
+                  <template v-for="(charInfo, idx) in contentChars" :key="`down-content-${idx}`">
+                    <br v-if="charInfo.char === '\n'" />
+                    <span
+                      v-else-if="charInfo.isSymbol"
+                      class="char-symbol"
+                      :style="charMarginStyle"
+                    >{{ charInfo.char === ' ' ? '&nbsp;' : charInfo.char }}</span>
+                    <span
+                      v-else
+                      class="god-char-block"
+                      :class="{
+                        'is-revealed': isCharRevealed(charInfo.char),
+                        'is-hidden': !isCharRevealed(charInfo.char),
+                        'is-hover-match': isMatchHover(charInfo.char)
+                      }"
+                      :style="charMarginStyle"
+                      @click="handleCharClick(charInfo.char)"
+                      @mouseenter="setHoveredChar(charInfo.char)"
+                      @mouseleave="clearHoveredChar"
+                    >
+                      {{ charInfo.char }}
+                    </span>
+                  </template>
+                </div>
               </div>
             </div>
           </section>
@@ -467,6 +495,8 @@ export default defineComponent({
     const theme = ref<'theme-light' | 'theme-dark' | 'theme-green' | 'theme-blue' | 'theme-transparent'>('theme-light')
     const fontSize = ref(22)
     const charMargin = ref(2)
+    const isVerticalCenter = ref(true)
+    const textAlign = ref<'left' | 'center'>('left')
 
     // 视窗尺寸配置：固定宽度 1920px，默认模拟半高 540px (1080 / 2)
     const DIVIDER_HEIGHT = 16
@@ -802,7 +832,8 @@ export default defineComponent({
     }))
 
     const textScrollStyle = computed(() => ({
-      overflowY: isAutoHeight.value ? 'visible' : ('auto' as const)
+      overflowY: isAutoHeight.value ? 'visible' : ('auto' as const),
+      textAlign: textAlign.value
     }))
 
     // 拖拽调整分割线 (Divider Dragging)
@@ -921,6 +952,8 @@ export default defineComponent({
       theme,
       fontSize,
       charMargin,
+      isVerticalCenter,
+      textAlign,
       boxHeight,
       upPartHeight,
       downPartHeight,
@@ -1363,10 +1396,13 @@ select {
 /* 文本滚动与排版区域 */
 .text-content-scroll {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   padding: 16px 48px;
   line-height: 1.8;
   letter-spacing: 0.06em;
   box-sizing: border-box;
+  min-height: 0;
 }
 
 /* 题目外框图层 (Question Boarder SVG Layer) */
@@ -1397,9 +1433,20 @@ select {
   z-index: 5;
 }
 
-/* 带有边框时的内边距，紧凑贴合 SVG 装饰内框 */
+/* 带有边框时的内边距，对称紧凑贴合 SVG 装饰内框 */
 .text-content-scroll.with-boarder {
-  padding: 18px 64px 20px 64px;
+  padding: 24px 64px;
+}
+
+/* 内部文字容器：垂直居中支撑 */
+.text-inner-container {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.text-inner-container.is-v-centered {
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 .up-part.has-boarder {
@@ -1440,12 +1487,14 @@ select {
   border-bottom: none;
   display: block;
   line-height: 1.4;
+  text-align: inherit;
 }
 
 .article-body-block {
   font-size: 1em;
   line-height: 1.9;
   display: block;
+  text-align: inherit;
 }
 
 /* 标点符号 */
