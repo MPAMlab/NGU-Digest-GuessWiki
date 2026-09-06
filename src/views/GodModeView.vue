@@ -104,11 +104,11 @@
           </button>
           <button
             class="btn btn-xs"
-            :class="{ active: hideIndicators }"
+            :class="{ active: !hideIndicators }"
             @click="hideIndicators = !hideIndicators"
-            title="隐藏区域顶部标签栏，录制纯净无遮挡画面"
+            title="切换位于屏幕外的区域信息指示条"
           >
-            🏷️ 纯净录屏: {{ hideIndicators ? '开' : '关' }}
+            🏷️ 外部指示栏: {{ hideIndicators ? '隐藏' : '显示' }}
           </button>
         </div>
 
@@ -237,6 +237,18 @@
         class="stage-scaler-container"
         :style="scalerContainerStyle"
       >
+        <!-- 外部状态指示条 (位于 1080p 屏幕外，绝不挤占视窗内部空间) -->
+        <div v-if="!hideIndicators" class="screen-outer-indicator-bar">
+          <div class="outer-pill tag-game">
+            <span class="pill-badge">📺 视频呈现区 (Game View)</span>
+            <span class="pill-info">宽: 1920px | 高: {{ upPartHeight }}px | 边框: {{ showBoarder ? '开启' : '关闭' }}</span>
+          </div>
+          <div class="outer-pill tag-god">
+            <span class="pill-badge">👑 上帝视角参考区 (God View)</span>
+            <span class="pill-info">宽: 1920px | 高: {{ downPartHeight }}px | 点击任意明文揭示/隐藏</span>
+          </div>
+        </div>
+
         <!-- 1080p 固定宽 1920px 模拟视窗主体 -->
         <div
           ref="screenBoxRef"
@@ -252,11 +264,6 @@
             <!-- 题目边框装饰图层 (Question Boarder SVG) -->
             <div v-if="showBoarder" class="question-boarder-layer">
               <img :src="questionBoarderSvg" class="boarder-svg-img" alt="Question Border Frame" />
-            </div>
-
-            <div v-if="!hideIndicators" class="part-indicator">
-              <span class="indicator-tag tag-game">📺 视频呈现区 (Game View - Black Squares)</span>
-              <span class="indicator-info">宽: 1920px | 高: {{ upPartHeight }}px | 边框: {{ showBoarder ? '开启' : '关闭' }}</span>
             </div>
 
             <div class="text-content-scroll" :class="{ 'with-boarder': showBoarder }" :style="textScrollStyle">
@@ -336,11 +343,6 @@
             class="box-part down-part"
             :style="{ height: `${downPartHeight}px`, fontSize: `${fontSize}px` }"
           >
-            <div v-if="!hideIndicators" class="part-indicator">
-              <span class="indicator-tag tag-god">👑 上帝视角参考区 (God View - Clickable Uncovered Text)</span>
-              <span class="indicator-info">宽: 1920px | 高: {{ downPartHeight }}px | 点击任意明文揭示/隐藏全部相同字</span>
-            </div>
-
             <div class="text-content-scroll" :style="textScrollStyle">
               <!-- 文章标题 -->
               <h2 class="article-title-block">
@@ -1317,44 +1319,51 @@ select {
   overflow: hidden;
 }
 
-.part-indicator {
+/* 外部状态指示条 (位于 1080p 屏幕外，绝不挤占视窗内部空间) */
+.screen-outer-indicator-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 16px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  background-color: rgba(0, 0, 0, 0.04);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  flex-shrink: 0;
+  width: 1920px;
+  margin-bottom: 8px;
   user-select: none;
+  box-sizing: border-box;
 }
 
-.indicator-tag {
-  padding: 2px 8px;
-  border-radius: 4px;
-}
-
-.tag-game {
-  background-color: #3b82f6;
+.outer-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  background-color: #1e293b;
   color: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 }
 
-.tag-god {
-  background-color: #8b5cf6;
-  color: #ffffff;
+.outer-pill.tag-game {
+  border-left: 4px solid #3b82f6;
 }
 
-.indicator-info {
-  color: rgba(0, 0, 0, 0.45);
+.outer-pill.tag-god {
+  border-left: 4px solid #8b5cf6;
+}
+
+.outer-pill .pill-badge {
+  font-weight: 700;
+}
+
+.outer-pill .pill-info {
+  color: #94a3b8;
   font-family: monospace;
 }
 
 /* 文本滚动与排版区域 */
 .text-content-scroll {
   flex: 1;
-  padding: 24px 48px;
+  padding: 16px 48px;
   line-height: 1.8;
   letter-spacing: 0.06em;
   box-sizing: border-box;
@@ -1383,19 +1392,14 @@ select {
   position: relative;
 }
 
-.box-part.up-part .part-indicator {
-  position: relative;
-  z-index: 10;
-}
-
 .box-part.up-part .text-content-scroll {
   position: relative;
   z-index: 5;
 }
 
-/* 带有边框时的内边距，确保文字严格位于 1920x500 内框中 */
+/* 带有边框时的内边距，紧凑贴合 SVG 装饰内框 */
 .text-content-scroll.with-boarder {
-  padding: 40px 76px 28px 76px;
+  padding: 18px 64px 20px 64px;
 }
 
 .up-part.has-boarder {
@@ -1403,6 +1407,8 @@ select {
 }
 
 .up-part.has-boarder .article-title-block {
+  margin-top: 0;
+  margin-block-start: 0;
   border-bottom: none;
   color: #2b080b;
 }
@@ -1425,6 +1431,8 @@ select {
 }
 
 .article-title-block {
+  margin-top: 0;
+  margin-block-start: 0;
   font-size: 1.35em;
   font-weight: 700;
   margin-bottom: 8px;
@@ -1631,10 +1639,6 @@ select {
   color: #334155;
   border-top: 1px solid #e2e8f0;
 }
-.god-mode-view.theme-light .down-part .part-indicator {
-  background-color: #f1f5f9;
-  border-bottom-color: #e2e8f0;
-}
 
 /* 2. 暗黑模式 (Dark) */
 .god-mode-view.theme-dark .screen-box-1080p {
@@ -1644,13 +1648,6 @@ select {
 .god-mode-view.theme-dark .up-part {
   background-color: #121216;
   color: #f1f5f9;
-}
-.god-mode-view.theme-dark .up-part .part-indicator {
-  background-color: #1a1a20;
-  border-bottom-color: #2a2a36;
-}
-.god-mode-view.theme-dark .up-part .indicator-info {
-  color: #64748b;
 }
 .god-mode-view.theme-dark .up-part .char-block.hidden {
   background-color: #2d2d38;
@@ -1665,13 +1662,6 @@ select {
   background-color: #181820;
   color: #e2e8f0;
   border-top: 1px solid #2a2a36;
-}
-.god-mode-view.theme-dark .down-part .part-indicator {
-  background-color: #20202a;
-  border-bottom-color: #2a2a36;
-}
-.god-mode-view.theme-dark .down-part .indicator-info {
-  color: #64748b;
 }
 .god-mode-view.theme-dark .down-part .god-char-block.is-hidden {
   background-color: #242430;
@@ -1689,14 +1679,6 @@ select {
   background-color: #00ff00 !important;
   color: #000000;
 }
-.god-mode-view.theme-green .up-part .part-indicator {
-  background-color: rgba(0, 0, 0, 0.2);
-  color: #000000;
-  border-bottom-color: rgba(0, 0, 0, 0.2);
-}
-.god-mode-view.theme-green .up-part .indicator-info {
-  color: #000000;
-}
 .god-mode-view.theme-green .up-part .char-block.hidden {
   background-color: #000000;
 }
@@ -1711,14 +1693,6 @@ select {
 /* 4. 蓝幕抠像模式 (Chroma Blue) */
 .god-mode-view.theme-blue .up-part {
   background-color: #0000ff !important;
-  color: #ffffff;
-}
-.god-mode-view.theme-blue .up-part .part-indicator {
-  background-color: rgba(0, 0, 0, 0.3);
-  color: #ffffff;
-  border-bottom-color: rgba(255, 255, 255, 0.2);
-}
-.god-mode-view.theme-blue .up-part .indicator-info {
   color: #ffffff;
 }
 .god-mode-view.theme-blue .up-part .char-block.hidden {
