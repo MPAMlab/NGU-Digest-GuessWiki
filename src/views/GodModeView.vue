@@ -543,7 +543,7 @@
             </div>
             <div class="summary-item">
               <span class="label">🎞️ 导出总帧数:</span>
-              <span class="val highlight">{{ clickSequence.length + (includeInitialFrame ? 1 : 0) }} 张图片</span>
+              <span class="val highlight">{{ clickSequence.length + (includeInitialFrame ? 1 : 0) + (includeFinalFullRevealFrame ? 1 : 0) }} 张图片</span>
             </div>
           </div>
 
@@ -551,6 +551,10 @@
             <label class="option-check">
               <input type="checkbox" v-model="includeInitialFrame" :disabled="isExporting" />
               <span>包含第 00 步（全遮罩未点开初始画面：<code>00_{{ titleText || '标题' }}_初始.png</code>）</span>
+            </label>
+            <label class="option-check">
+              <input type="checkbox" v-model="includeFinalFullRevealFrame" :disabled="isExporting" />
+              <span>包含最终步骤（全文章揭示无黑块：<code>{{ String(clickSequence.length + 1).padStart(2, '0') }}_{{ titleText || '标题' }}_全展示.png</code>）</span>
             </label>
 
             <div class="option-group">
@@ -578,7 +582,11 @@
                   {{ String(idx + 1).padStart(2, '0') }}_{{ titleText || '标题' }}_{{ step.char }}.png
                 </li>
                 <li v-if="clickSequence.length > 3" class="more-steps">
-                  ... 及后续 {{ clickSequence.length - 3 }} 张点开字符图片
+                  ... 及中间 {{ clickSequence.length - 3 }} 张点开字符图片
+                </li>
+                <li v-if="includeFinalFullRevealFrame">
+                  <span class="badge">{{ String(clickSequence.length + 1).padStart(2, '0') }}</span>
+                  {{ String(clickSequence.length + 1).padStart(2, '0') }}_{{ titleText || '标题' }}_全展示.png
                 </li>
               </ul>
             </div>
@@ -655,6 +663,7 @@ export default defineComponent({
     const exportProgress = ref(0)
     const exportStatusText = ref('')
     const includeInitialFrame = ref(true)
+    const includeFinalFullRevealFrame = ref(true)
     const exportAsZip = ref(true)
 
     const isDragOver = ref(false)
@@ -1084,7 +1093,10 @@ export default defineComponent({
       exportStatusText.value = '准备渲染...'
 
       const safeTitle = (titleText.value.trim() || '未命名文章').replace(/[\\/:*?"<>|]/g, '_')
-      const totalSteps = clickSequence.value.length + (includeInitialFrame.value ? 1 : 0)
+      const totalSteps =
+        clickSequence.value.length +
+        (includeInitialFrame.value ? 1 : 0) +
+        (includeFinalFullRevealFrame.value ? 1 : 0)
       let completedSteps = 0
 
       try {
@@ -1097,6 +1109,7 @@ export default defineComponent({
             })
           } catch (e) {
             console.warn('获取字体嵌入样式失败，将自动降级:', e)
+            sessionFontEmbedCSS = ''
           }
         }
 
@@ -1112,6 +1125,7 @@ export default defineComponent({
             folder.file(`00_${safeTitle}_初始.png`, blob)
             completedSteps++
             exportProgress.value = Math.round((completedSteps / totalSteps) * 90)
+            await new Promise(resolve => setTimeout(resolve, 20))
           }
 
           // 逐帧渲染记录的每个点开步骤（直接以 Blob 存入 zip，零 Base64 转换开销）
@@ -1129,6 +1143,22 @@ export default defineComponent({
 
             completedSteps++
             exportProgress.value = Math.round((completedSteps / totalSteps) * 90)
+            await new Promise(resolve => setTimeout(resolve, 20))
+          }
+
+          // 若勾选，渲染最后一步（全展示无黑块）
+          if (includeFinalFullRevealFrame.value) {
+            const finalOrderStr = String(clickSequence.value.length + 1).padStart(2, '0')
+            const filename = `${finalOrderStr}_${safeTitle}_全展示.png`
+            exportStatusText.value = `正在渲染最终步: ${filename} (${completedSteps + 1} / ${totalSteps})`
+            revealedCharSet.value = new Set(uniqueCharSet.value)
+
+            const blob = await captureUpPartBlob()
+            folder.file(filename, blob)
+
+            completedSteps++
+            exportProgress.value = Math.round((completedSteps / totalSteps) * 90)
+            await new Promise(resolve => setTimeout(resolve, 20))
           }
 
           // 生成 ZIP 压缩包并下载（PNG已自身具备极高压缩比，使用 STORE 模式秒级打包，杜绝 JS 重复压缩卡死）
@@ -1175,6 +1205,20 @@ export default defineComponent({
 
             exportStatusText.value = `正在导出: ${filename} (${completedSteps + 1} / ${totalSteps})`
             revealedCharSet.value = new Set(step.revealedSnapshot)
+
+            const blob = await captureUpPartBlob()
+            downloadBlob(blob, filename)
+
+            completedSteps++
+            exportProgress.value = Math.round((completedSteps / totalSteps) * 100)
+            await new Promise(resolve => setTimeout(resolve, 80))
+          }
+
+          if (includeFinalFullRevealFrame.value) {
+            const finalOrderStr = String(clickSequence.value.length + 1).padStart(2, '0')
+            const filename = `${finalOrderStr}_${safeTitle}_全展示.png`
+            exportStatusText.value = `正在导出: ${filename} (${completedSteps + 1} / ${totalSteps})`
+            revealedCharSet.value = new Set(uniqueCharSet.value)
 
             const blob = await captureUpPartBlob()
             downloadBlob(blob, filename)
@@ -1486,6 +1530,7 @@ export default defineComponent({
       exportProgress,
       exportStatusText,
       includeInitialFrame,
+      includeFinalFullRevealFrame,
       exportAsZip,
       undoLastStep,
       removeStep,
