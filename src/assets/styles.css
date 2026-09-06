@@ -1,13 +1,21 @@
 /* 全局样式 */
+:root {
+  --font-family-base: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
 
-/* 等宽字体设置 */
+body {
+  font-family: var(--font-family-base);
+}
+
+/* 等宽/文字排版字体设置 */
 .monospace {
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  letter-spacing: 0.1em;
+  font-family: 'Noto Sans SC', 'Consolas', 'Monaco', 'Courier New', monospace;
+  letter-spacing: 0.08em;
 }
 
 /* 文字方块样式 */
 .char-block {
+  font-family: 'Noto Sans SC', sans-serif;
   display: inline-block;
   width: 1.2em;
   height: 1.2em;

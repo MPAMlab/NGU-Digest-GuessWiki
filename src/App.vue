@@ -1,32 +1,42 @@
 <template>
-  <div id="app">
+  <div id="app" :class="{ 'is-god-mode': isGodMode }">
     <div class="app-content">
       <router-view />
     </div>
-    <Footer />
+    <Footer v-if="!isGodMode" />
   </div>
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue'
+import { defineComponent, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import Footer from '@/components/Footer.vue'
 
 export default defineComponent({
   name: 'App',
   components: {
     Footer
+  },
+  setup() {
+    const route = useRoute()
+    const isGodMode = computed(() => route.name === 'GodMode')
+
+    return {
+      isGodMode
+    }
   }
 })
 </script>
 
 <style>
 #app {
-  font-family: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   height: 100vh;
   display: flex;
   flex-direction: column;
+  background-color: #f7f9fc;
 }
 
 * {
@@ -43,25 +53,11 @@ html, body {
 .app-content {
   flex: 1;
   overflow-y: auto;
-}
-</style>
-
-<style>
-#app {
-  font-family: 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-html, body {
-  height: 100%;
-  overflow: hidden;
+#app.is-god-mode .app-content {
+  overflow: auto;
 }
 </style>

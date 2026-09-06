@@ -3,6 +3,19 @@ import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
 const routes: Array<RouteRecordRaw> = [
   {
     path: '/',
+    name: 'GodMode',
+    component: () => import('@/views/GodModeView.vue')
+  },
+  {
+    path: '/god',
+    redirect: '/'
+  },
+  {
+    path: '/post-prod',
+    redirect: '/'
+  },
+  {
+    path: '/classic',
     name: 'Home',
     component: () => import('@/views/HomeView.vue')
   },

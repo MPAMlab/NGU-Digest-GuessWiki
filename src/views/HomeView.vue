@@ -1,5 +1,10 @@
 <template>
   <div class="home-container">
+    <div class="post-prod-banner">
+      <span>🎬 视频后制进行中？</span>
+      <router-link to="/" class="post-prod-link">进入【视频后制上帝模式】（1920x540 模拟视窗） &rarr;</router-link>
+    </div>
+
     <h1>百科猜字游戏</h1>
 
     <!-- 文件上传区域 -->
@@ -218,6 +223,31 @@ export default defineComponent({
   max-width: 600px;
   margin: 0 auto;
   padding: 40px 20px 60px;
+}
+
+.post-prod-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #1e293b, #334155);
+  color: #ffffff;
+  padding: 12px 18px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+  font-size: 14px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.post-prod-link {
+  color: #38bdf8;
+  text-decoration: none;
+  font-weight: 700;
+  transition: color 0.2s;
+}
+
+.post-prod-link:hover {
+  color: #7dd3fc;
+  text-decoration: underline;
 }
 
 h1 {
