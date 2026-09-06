@@ -1,5 +1,5 @@
 <template>
-  <div class="god-mode-view" :class="[theme, { 'is-dragging': isDraggingDivider || isDraggingBoxBottom }]">
+  <div class="god-mode-view" :class="[theme]">
     <!-- 顶部综合控制台 -->
     <header class="top-bar">
       <div class="bar-left">
@@ -60,6 +60,14 @@
           <label>视窗预设:</label>
           <button
             class="btn btn-xs"
+            :class="{ active: boxHeight === 350 && !isAutoHeight }"
+            @click="setBoxHeight(350)"
+            title="默认高度 (1920x350)"
+          >
+            350p默认
+          </button>
+          <button
+            class="btn btn-xs"
             :class="{ active: boxHeight === 540 && !isNativeBoarderHeight }"
             @click="setBoxHeight(540)"
             title="1080p视频半屏高 (1920x540)"
@@ -70,9 +78,17 @@
             class="btn btn-xs"
             :class="{ active: isNativeBoarderHeight }"
             @click="setBoarderNativeSize"
-            title="题目边框原生高度 (1920x500 呈现区)"
+            title="题目边框原生高度 (1920x500)"
           >
             500p边框原生
+          </button>
+          <button
+            class="btn btn-xs"
+            :class="{ active: boxHeight === 700 }"
+            @click="setBoxHeight(700)"
+            title="大屏高度 (1920x700)"
+          >
+            700p大屏
           </button>
           <button
             class="btn btn-xs"
@@ -145,55 +161,53 @@
     <!-- 次级工具栏：微调与显示配置 -->
     <div class="sub-toolbar">
       <div class="sub-item">
-        <label>字号大小:</label>
-        <input type="range" min="14" max="38" step="1" v-model.number="fontSize" />
-        <span class="range-val">{{ fontSize }}px</span>
+        <label>标题字号:</label>
+        <input
+          type="number"
+          class="num-input"
+          min="12"
+          max="120"
+          step="1"
+          v-model.number="titleFontSize"
+        />
+        <span class="unit">px</span>
+      </div>
+
+      <div class="sub-item">
+        <label>正文字号:</label>
+        <input
+          type="number"
+          class="num-input"
+          min="12"
+          max="100"
+          step="1"
+          v-model.number="bodyFontSize"
+        />
+        <span class="unit">px</span>
       </div>
 
       <div class="sub-item">
         <label>字块间距:</label>
-        <input type="range" min="0" max="10" step="1" v-model.number="charMargin" />
-        <span class="range-val">{{ charMargin }}px</span>
+        <input
+          type="number"
+          class="num-input"
+          min="0"
+          max="20"
+          step="1"
+          v-model.number="charMargin"
+        />
+        <span class="unit">px</span>
       </div>
 
       <div class="sub-item">
-        <label>总高度:</label>
+        <label>视窗高度:</label>
         <input
           type="number"
           class="num-input"
           min="200"
           max="3000"
           step="10"
-          :value="boxHeight"
-          @change="onBoxHeightInputChange"
-        />
-        <span class="unit">px</span>
-      </div>
-
-      <div class="sub-item">
-        <label>呈现区高:</label>
-        <input
-          type="number"
-          class="num-input"
-          min="60"
-          max="2000"
-          step="10"
-          :value="upPartHeight"
-          @change="onUpHeightInputChange"
-        />
-        <span class="unit">px</span>
-      </div>
-
-      <div class="sub-item">
-        <label>参考区高:</label>
-        <input
-          type="number"
-          class="num-input"
-          min="60"
-          max="2000"
-          step="10"
-          :value="downPartHeight"
-          @change="onDownHeightInputChange"
+          v-model.number="boxHeight"
         />
         <span class="unit">px</span>
       </div>
@@ -235,7 +249,7 @@
 
       <div class="sub-item sub-item-right">
         <span class="dim-hint">
-          💡 提示：在【呈现区黑方块】或【参考区明文】上点击任意字符，均可同步揭示/隐藏全部相同字符；可拖动中间分割条与底部手柄调整高度。
+          💡 提示：在【呈现区黑方块】或【参考区明文】上点击任意字符，均可同步揭示/隐藏全部相同字符。
         </span>
       </div>
     </div>
@@ -328,30 +342,21 @@
         class="stage-scaler-container"
         :style="scalerContainerStyle"
       >
-        <!-- 外部状态指示条 (位于 1080p 屏幕外，绝不挤占视窗内部空间) -->
-        <div v-if="!hideIndicators" class="screen-outer-indicator-bar">
-          <div class="outer-pill tag-game">
-            <span class="pill-badge">📺 视频呈现区 (Game View)</span>
-            <span class="pill-info">宽: 1920px | 高: {{ upPartHeight }}px | 边框: {{ showBoarder ? '开启' : '关闭' }}</span>
+        <div class="stage-scaler-inner" :style="scalerInnerStyle">
+          <!-- 1. 呈现区指示条 (位于 1080p 屏幕外，绝不挤占视窗内部空间) -->
+          <div v-if="!hideIndicators" class="screen-outer-indicator-bar">
+            <div class="outer-pill tag-game">
+              <span class="pill-badge">📺 视频呈现区 (Game View)</span>
+              <span class="pill-info">宽: 1920px | 高: {{ isAutoHeight ? '自适应' : `${boxHeight}px` }} | 边框: {{ showBoarder ? '开启' : '关闭' }}</span>
+            </div>
           </div>
-          <div class="outer-pill tag-god">
-            <span class="pill-badge">👑 上帝视角参考区 (God View)</span>
-            <span class="pill-info">宽: 1920px | 高: {{ downPartHeight }}px | 点击任意明文揭示/隐藏</span>
-          </div>
-        </div>
 
-        <!-- 1080p 固定宽 1920px 模拟视窗主体 -->
-        <div
-          ref="screenBoxRef"
-          class="screen-box-1080p"
-          :style="screenBoxStyle"
-        >
-          <!-- 1. 上半部分：呈现区（黑方块遮罩模式，模拟视频画面） -->
-          <section
+          <!-- Box 1：呈现区（黑方块遮罩模式，模拟视频画面，独立 1920px 视窗） -->
+          <div
             ref="upPartRef"
-            class="box-part up-part"
+            class="screen-box-1080p up-part"
             :class="{ 'has-boarder': showBoarder }"
-            :style="{ height: `${upPartHeight}px`, fontSize: `${fontSize}px` }"
+            :style="singleBoxStyle"
           >
             <!-- 题目边框装饰图层 (Question Boarder SVG) -->
             <div v-if="showBoarder" class="question-boarder-layer">
@@ -361,12 +366,13 @@
             <div class="text-content-scroll" :class="{ 'with-boarder': showBoarder }" :style="textScrollStyle">
               <div class="text-inner-container" :class="{ 'is-v-centered': isVerticalCenter }">
                 <!-- 文章标题 -->
-                <h2 class="article-title-block">
+                <h2 class="article-title-block" :style="titleStyle">
                   <template v-for="(charInfo, idx) in titleChars" :key="`up-title-${idx}`">
                     <br v-if="charInfo.char === '\n'" />
                     <span
                       v-else-if="charInfo.isSymbol"
                       class="char-symbol"
+                      :class="{ 'is-slash': isSlashChar(charInfo.char) }"
                       :style="charMarginStyle"
                     >{{ charInfo.char === ' ' ? '&nbsp;' : charInfo.char }}</span>
                     <span
@@ -388,12 +394,13 @@
                 </h2>
 
                 <!-- 文章正文 -->
-                <div class="article-body-block">
+                <div class="article-body-block" :style="bodyStyle">
                   <template v-for="(charInfo, idx) in contentChars" :key="`up-content-${idx}`">
                     <br v-if="charInfo.char === '\n'" />
                     <span
                       v-else-if="charInfo.isSymbol"
                       class="char-symbol"
+                      :class="{ 'is-slash': isSlashChar(charInfo.char) }"
                       :style="charMarginStyle"
                     >{{ charInfo.char === ' ' ? '&nbsp;' : charInfo.char }}</span>
                     <span
@@ -415,37 +422,34 @@
                 </div>
               </div>
             </div>
-          </section>
-
-          <!-- 2. 中间可拖拽分割条 -->
-          <div
-            class="resize-divider"
-            @mousedown="startDividerDrag"
-            title="上下拖动调整两部分的高度分配"
-          >
-            <div class="divider-line"></div>
-            <div class="divider-handle">
-              <span class="handle-dots">⋮⋮⋮</span>
-              <span class="handle-text">拖动调节上下分栏高度 (呈现区: {{ upPartHeight }}px / 参考区: {{ downPartHeight }}px)</span>
-              <span class="handle-dots">⋮⋮⋮</span>
-            </div>
-            <div class="divider-line"></div>
           </div>
 
-          <!-- 3. 下半部分：参考区（上帝视角无遮罩明文，点击可触发揭示） -->
-          <section
-            class="box-part down-part"
-            :style="{ height: `${downPartHeight}px`, fontSize: `${fontSize}px` }"
+          <!-- 两个 Box 之间留空 -->
+          <div class="boxes-gap-spacer"></div>
+
+          <!-- 2. 参考区指示条 -->
+          <div v-if="!hideIndicators" class="screen-outer-indicator-bar">
+            <div class="outer-pill tag-god">
+              <span class="pill-badge">👑 上帝视角参考区 (God View)</span>
+              <span class="pill-info">宽: 1920px | 高: {{ isAutoHeight ? '自适应' : `${boxHeight}px` }} | 点击任意明文揭示/隐藏</span>
+            </div>
+          </div>
+
+          <!-- Box 2：参考区（上帝视角无遮罩明文，独立 1920px 视窗，与呈现区共享高度） -->
+          <div
+            class="screen-box-1080p down-part"
+            :style="singleBoxStyle"
           >
             <div class="text-content-scroll" :style="textScrollStyle">
               <div class="text-inner-container" :class="{ 'is-v-centered': isVerticalCenter }">
                 <!-- 文章标题 -->
-                <h2 class="article-title-block">
+                <h2 class="article-title-block" :style="titleStyle">
                   <template v-for="(charInfo, idx) in titleChars" :key="`down-title-${idx}`">
                     <br v-if="charInfo.char === '\n'" />
                     <span
                       v-else-if="charInfo.isSymbol"
                       class="char-symbol"
+                      :class="{ 'is-slash': isSlashChar(charInfo.char) }"
                       :style="charMarginStyle"
                     >{{ charInfo.char === ' ' ? '&nbsp;' : charInfo.char }}</span>
                     <span
@@ -467,12 +471,13 @@
                 </h2>
 
                 <!-- 文章正文 -->
-                <div class="article-body-block">
+                <div class="article-body-block" :style="bodyStyle">
                   <template v-for="(charInfo, idx) in contentChars" :key="`down-content-${idx}`">
                     <br v-if="charInfo.char === '\n'" />
                     <span
                       v-else-if="charInfo.isSymbol"
                       class="char-symbol"
+                      :class="{ 'is-slash': isSlashChar(charInfo.char) }"
                       :style="charMarginStyle"
                     >{{ charInfo.char === ' ' ? '&nbsp;' : charInfo.char }}</span>
                     <span
@@ -494,15 +499,6 @@
                 </div>
               </div>
             </div>
-          </section>
-
-          <!-- 4. 底部视窗总高度调节手柄 -->
-          <div
-            class="box-bottom-resizer"
-            @mousedown="startBoxResizeDrag"
-            title="上下拖拽调整整个1920px模拟视窗总高度"
-          >
-            <div class="resizer-bar"></div>
           </div>
         </div>
       </div>
@@ -531,7 +527,7 @@
             </div>
             <div class="summary-item">
               <span class="label">📐 输出规格:</span>
-              <span class="val font-bold">固定宽 1920px × 当前高 {{ upPartHeight }}px</span>
+              <span class="val font-bold">固定宽 1920px × 当前高 {{ isAutoHeight ? '自适应' : `${boxHeight}px` }}</span>
             </div>
             <div class="summary-item">
               <span class="label">📑 对应文章:</span>
@@ -679,41 +675,39 @@ export default defineComponent({
 
     // 样式与排版配置
     const theme = ref<'theme-light' | 'theme-dark' | 'theme-green' | 'theme-blue' | 'theme-transparent'>('theme-light')
-    const fontSize = ref(22)
+    const titleFontSize = ref(45)
+    const bodyFontSize = ref(30)
     const charMargin = ref(2)
     const isVerticalCenter = ref(true)
     const textAlign = ref<'left' | 'center'>('left')
 
-    // 视窗尺寸配置：固定宽度 1920px，默认模拟半高 540px (1080 / 2)
-    const DIVIDER_HEIGHT = 16
-    const boxHeight = ref(540)
-    const upPartHeight = ref(260)
-    const downPartHeight = ref(264)
+    const titleStyle = computed(() => ({
+      fontSize: `${titleFontSize.value}px`,
+      fontWeight: 'bold' as const
+    }))
+
+    const bodyStyle = computed(() => ({
+      fontSize: `${bodyFontSize.value}px`
+    }))
+
+    // 视窗尺寸配置：固定宽度 1920px，两个视窗共享高度，默认 350px
+    const boxHeight = ref(350)
     const isAutoHeight = ref(false)
 
     const isNativeBoarderHeight = computed(() => {
-      return upPartHeight.value === 500 && showBoarder.value
+      return boxHeight.value === 500 && showBoarder.value && !isAutoHeight.value
     })
 
     const setBoarderNativeSize = () => {
       showBoarder.value = true
       isAutoHeight.value = false
-      upPartHeight.value = 500
-      downPartHeight.value = 280
-      boxHeight.value = 500 + 280 + DIVIDER_HEIGHT
-      showToast('已调整为题目边框原生高度 (呈现区 1920x500)')
+      boxHeight.value = 500
+      showToast('已调整为题目边框原生高度 (1920x500)')
     }
 
     // 缩放模式与自适应缩放计算
     const zoomMode = ref<'fit' | '100' | '75' | '50'>('fit')
     const fitScale = ref(1)
-
-    // 拖拽调整状态
-    const isDraggingDivider = ref(false)
-    const isDraggingBoxBottom = ref(false)
-    let dragStartY = 0
-    let initialUpHeight = 0
-    let initialBoxHeight = 0
 
     // 通知提示
     const notification = reactive({
@@ -734,6 +728,11 @@ export default defineComponent({
     // 字符 Key 标准化
     const getCharKey = (char: string): string => {
       return char.toLowerCase()
+    }
+
+    // 判断是否为斜杠字符（呈现为全宽方格样式）
+    const isSlashChar = (char: string): boolean => {
+      return char === '/' || char === '／' || char === '\\'
     }
 
     // 判断字符是否已揭示
@@ -988,7 +987,7 @@ export default defineComponent({
 
       return await toPng(upPartRef.value, {
         width: 1920,
-        height: upPartHeight.value,
+        height: boxHeight.value,
         pixelRatio: 1,
         cacheBust: false,
         backgroundColor: canvasBg,
@@ -996,9 +995,9 @@ export default defineComponent({
           width: '1920px',
           minWidth: '1920px',
           maxWidth: '1920px',
-          height: `${upPartHeight.value}px`,
-          minHeight: `${upPartHeight.value}px`,
-          maxHeight: `${upPartHeight.value}px`,
+          height: `${boxHeight.value}px`,
+          minHeight: `${boxHeight.value}px`,
+          maxHeight: `${boxHeight.value}px`,
           transform: 'none',
           margin: '0',
           padding: '0',
@@ -1186,10 +1185,7 @@ export default defineComponent({
     const setBoxHeight = (h: number) => {
       isAutoHeight.value = false
       boxHeight.value = h
-      const half = Math.floor((h - DIVIDER_HEIGHT) / 2)
-      upPartHeight.value = half
-      downPartHeight.value = h - DIVIDER_HEIGHT - half
-      showToast(`已将总高度设置为 ${h}px`)
+      showToast(`已将视窗高度设置为 ${h}px`)
     }
 
     const toggleAutoHeight = () => {
@@ -1197,38 +1193,7 @@ export default defineComponent({
       if (isAutoHeight.value) {
         showToast('已开启自适应内容高度模式')
       } else {
-        setBoxHeight(540)
-      }
-    }
-
-    const onBoxHeightInputChange = (e: Event) => {
-      const val = parseInt((e.target as HTMLInputElement).value, 10)
-      if (!isNaN(val) && val >= 200) {
-        setBoxHeight(val)
-      }
-    }
-
-    const onUpHeightInputChange = (e: Event) => {
-      const val = parseInt((e.target as HTMLInputElement).value, 10)
-      if (!isNaN(val) && val >= 60) {
-        upPartHeight.value = val
-        if (!isAutoHeight.value) {
-          downPartHeight.value = Math.max(60, boxHeight.value - DIVIDER_HEIGHT - val)
-        } else {
-          boxHeight.value = upPartHeight.value + downPartHeight.value + DIVIDER_HEIGHT
-        }
-      }
-    }
-
-    const onDownHeightInputChange = (e: Event) => {
-      const val = parseInt((e.target as HTMLInputElement).value, 10)
-      if (!isNaN(val) && val >= 60) {
-        downPartHeight.value = val
-        if (!isAutoHeight.value) {
-          upPartHeight.value = Math.max(60, boxHeight.value - DIVIDER_HEIGHT - val)
-        } else {
-          boxHeight.value = upPartHeight.value + downPartHeight.value + DIVIDER_HEIGHT
-        }
+        setBoxHeight(350)
       }
     }
 
@@ -1250,24 +1215,36 @@ export default defineComponent({
       return fitScale.value
     })
 
+    const totalUnscaledHeight = computed(() => {
+      if (isAutoHeight.value) return 0
+      const indicatorsHeight = hideIndicators.value ? 0 : 72
+      const gapHeight = 32
+      return boxHeight.value * 2 + indicatorsHeight + gapHeight
+    })
+
     const scalerContainerStyle = computed(() => {
       const scale = isExporting.value ? 1 : currentScale.value
-      const scaledHeight = (isAutoHeight.value ? 'auto' : `${Math.round(boxHeight.value * scale)}px`)
       return {
         width: isExporting.value ? '1920px' : `${Math.round(1920 * scale)}px`,
-        height: scaledHeight
+        height: isAutoHeight.value ? 'auto' : `${Math.round(totalUnscaledHeight.value * scale)}px`
       }
     })
 
-    const screenBoxStyle = computed(() => {
+    const scalerInnerStyle = computed(() => {
       const scale = isExporting.value ? 1 : currentScale.value
       return {
         width: '1920px',
-        height: isAutoHeight.value ? 'auto' : `${boxHeight.value}px`,
         transform: isExporting.value ? 'none' : `scale(${scale})`,
         transformOrigin: 'top left'
       }
     })
+
+    const singleBoxStyle = computed(() => ({
+      width: '1920px',
+      height: isAutoHeight.value ? 'auto' : `${boxHeight.value}px`,
+      minHeight: isAutoHeight.value ? 'auto' : `${boxHeight.value}px`,
+      maxHeight: isAutoHeight.value ? 'none' : `${boxHeight.value}px`
+    }))
 
     const charMarginStyle = computed(() => ({
       margin: `0 ${charMargin.value}px`
@@ -1277,68 +1254,6 @@ export default defineComponent({
       overflowY: isAutoHeight.value ? 'visible' : ('auto' as const),
       textAlign: textAlign.value
     }))
-
-    // 拖拽调整分割线 (Divider Dragging)
-    const startDividerDrag = (e: MouseEvent) => {
-      isDraggingDivider.value = true
-      dragStartY = e.clientY
-      initialUpHeight = upPartHeight.value
-
-      window.addEventListener('mousemove', handleDividerMouseMove)
-      window.addEventListener('mouseup', stopDividerDrag)
-      document.body.style.userSelect = 'none'
-      document.body.style.cursor = 'row-resize'
-    }
-
-    const handleDividerMouseMove = (e: MouseEvent) => {
-      if (!isDraggingDivider.value) return
-      const deltaY = (e.clientY - dragStartY) / currentScale.value
-      const minH = 60
-      const totalAvailable = isAutoHeight.value
-        ? upPartHeight.value + downPartHeight.value
-        : boxHeight.value - DIVIDER_HEIGHT
-
-      const newUp = Math.round(Math.max(minH, Math.min(totalAvailable - minH, initialUpHeight + deltaY)))
-      upPartHeight.value = newUp
-      downPartHeight.value = totalAvailable - newUp
-    }
-
-    const stopDividerDrag = () => {
-      isDraggingDivider.value = false
-      window.removeEventListener('mousemove', handleDividerMouseMove)
-      window.removeEventListener('mouseup', stopDividerDrag)
-      document.body.style.userSelect = ''
-      document.body.style.cursor = ''
-    }
-
-    // 拖拽调整视窗底边总高度 (Box Bottom Resizer Dragging)
-    const startBoxResizeDrag = (e: MouseEvent) => {
-      isDraggingBoxBottom.value = true
-      dragStartY = e.clientY
-      initialBoxHeight = boxHeight.value
-
-      window.addEventListener('mousemove', handleBoxResizeMouseMove)
-      window.addEventListener('mouseup', stopBoxResizeDrag)
-      document.body.style.userSelect = 'none'
-      document.body.style.cursor = 'ns-resize'
-    }
-
-    const handleBoxResizeMouseMove = (e: MouseEvent) => {
-      if (!isDraggingBoxBottom.value) return
-      const deltaY = (e.clientY - dragStartY) / currentScale.value
-      const newHeight = Math.round(Math.max(200, Math.min(3000, initialBoxHeight + deltaY)))
-      const diff = newHeight - boxHeight.value
-      boxHeight.value = newHeight
-      downPartHeight.value = Math.max(60, downPartHeight.value + diff)
-    }
-
-    const stopBoxResizeDrag = () => {
-      isDraggingBoxBottom.value = false
-      window.removeEventListener('mousemove', handleBoxResizeMouseMove)
-      window.removeEventListener('mouseup', stopBoxResizeDrag)
-      document.body.style.userSelect = ''
-      document.body.style.cursor = ''
-    }
 
     // 切换录制开启 / 暂停状态
     const toggleRecording = () => {
@@ -1417,10 +1332,6 @@ export default defineComponent({
     onUnmounted(() => {
       window.removeEventListener('resize', updateFitScale)
       window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('mousemove', handleDividerMouseMove)
-      window.removeEventListener('mouseup', stopDividerDrag)
-      window.removeEventListener('mousemove', handleBoxResizeMouseMove)
-      window.removeEventListener('mouseup', stopBoxResizeDrag)
     })
 
     return {
@@ -1436,22 +1347,22 @@ export default defineComponent({
       hoveredChar,
       clickMode,
       theme,
-      fontSize,
+      titleFontSize,
+      bodyFontSize,
+      titleStyle,
+      bodyStyle,
       charMargin,
       isVerticalCenter,
       textAlign,
       boxHeight,
-      upPartHeight,
-      downPartHeight,
       isAutoHeight,
       zoomMode,
       currentScale,
       scalerContainerStyle,
-      screenBoxStyle,
+      scalerInnerStyle,
+      singleBoxStyle,
       charMarginStyle,
       textScrollStyle,
-      isDraggingDivider,
-      isDraggingBoxBottom,
       notification,
       historyStack,
       historyIndex,
@@ -1461,6 +1372,7 @@ export default defineComponent({
       uniqueCharCount,
       uniqueRevealedCount,
       isCharRevealed,
+      isSlashChar,
       isMatchHover,
       setHoveredChar,
       clearHoveredChar,
@@ -1480,11 +1392,6 @@ export default defineComponent({
       setBoarderNativeSize,
       setBoxHeight,
       toggleAutoHeight,
-      onBoxHeightInputChange,
-      onUpHeightInputChange,
-      onDownHeightInputChange,
-      startDividerDrag,
-      startBoxResizeDrag,
       upPartRef,
       clickSequence,
       isRecordingSequence,
@@ -1519,10 +1426,6 @@ export default defineComponent({
   overflow: hidden;
   font-family: 'Noto Serif', 'Noto Sans SC', serif, sans-serif;
   user-select: none;
-}
-
-.god-mode-view.is-dragging {
-  cursor: row-resize !important;
 }
 
 /* 顶部综合控制台 */
@@ -2266,7 +2169,20 @@ select {
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
 }
 
-/* 1080p 模拟视窗主体 (固定 1920px 宽) */
+.stage-scaler-inner {
+  width: 1920px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 两个视窗之间的留空间隔 */
+.boxes-gap-spacer {
+  height: 32px;
+  flex-shrink: 0;
+}
+
+/* 1080p 模拟视窗主体 (固定 1920px 宽，各独立成框) */
 .screen-box-1080p {
   width: 1920px;
   min-width: 1920px;
@@ -2279,17 +2195,7 @@ select {
   background-color: #ffffff;
   overflow: hidden;
   box-sizing: content-box;
-}
-
-/* 呈现区与参考区共用样式 */
-.box-part {
-  width: 100%;
   flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  box-sizing: border-box;
-  overflow: hidden;
 }
 
 /* 外部状态指示条 (位于 1080p 屏幕外，绝不挤占视窗内部空间) */
@@ -2333,8 +2239,10 @@ select {
   font-family: monospace;
 }
 
-/* 文本滚动与排版区域 */
+/* 文本滚动与排版区域（确保高于背景边框图层） */
 .text-content-scroll {
+  position: relative;
+  z-index: 5;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -2368,7 +2276,7 @@ select {
   display: block;
 }
 
-.box-part.up-part {
+.up-part {
   width: 1920px;
   min-width: 1920px;
   max-width: 1920px;
@@ -2379,7 +2287,7 @@ select {
   padding: 0;
 }
 
-.box-part.up-part .text-content-scroll {
+.up-part .text-content-scroll {
   position: relative;
   z-index: 5;
 }
@@ -2431,7 +2339,7 @@ select {
 .article-title-block {
   margin-top: 0;
   margin-block-start: 0;
-  font-size: 1.35em;
+  font-size: 45px;
   font-weight: 700;
   margin-bottom: 8px;
   padding-bottom: 0;
@@ -2442,7 +2350,7 @@ select {
 }
 
 .article-body-block {
-  font-size: 1em;
+  font-size: 30px;
   line-height: 1.9;
   display: block;
   text-align: inherit;
@@ -2452,6 +2360,19 @@ select {
 .char-symbol {
   display: inline-block;
   vertical-align: middle;
+}
+
+/* 斜杠全宽方格样式 (与字块方格 1.25em 对齐居中) */
+.char-symbol.is-slash {
+  display: inline-block;
+  width: 1.25em;
+  height: 1.25em;
+  line-height: 1.25;
+  text-align: center;
+  vertical-align: middle;
+  font-family: 'Noto Serif', 'Noto Sans SC', serif, sans-serif;
+  font-weight: 700;
+  box-sizing: border-box;
 }
 
 /* 呈现区字符方块 (Black Square Mask) */
@@ -2544,87 +2465,6 @@ select {
   transform: scale(1.12) !important;
 }
 
-/* 中间可拖拽分割条 */
-.resize-divider {
-  height: 16px;
-  background-color: #1e293b;
-  cursor: row-resize;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  user-select: none;
-  transition: background-color 0.2s;
-  border-top: 1px solid #334155;
-  border-bottom: 1px solid #334155;
-  position: relative;
-  z-index: 60;
-}
-
-.resize-divider:hover {
-  background-color: #3b82f6;
-}
-
-.resize-divider:hover .handle-text,
-.resize-divider:hover .handle-dots {
-  color: #ffffff;
-}
-
-.divider-line {
-  flex: 1;
-  height: 1px;
-  background-color: rgba(255, 255, 255, 0.15);
-  margin: 0 12px;
-}
-
-.divider-handle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.handle-dots {
-  color: #94a3b8;
-  font-size: 12px;
-  letter-spacing: -2px;
-}
-
-.handle-text {
-  font-size: 11px;
-  color: #94a3b8;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-}
-
-/* 底部总高调节手柄 */
-.box-bottom-resizer {
-  height: 14px;
-  background-color: #0f172a;
-  cursor: ns-resize;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border-top: 1px solid #334155;
-  transition: background-color 0.2s;
-  z-index: 60;
-}
-
-.box-bottom-resizer:hover {
-  background-color: #2563eb;
-}
-
-.resizer-bar {
-  width: 60px;
-  height: 4px;
-  border-radius: 2px;
-  background-color: #475569;
-}
-
-.box-bottom-resizer:hover .resizer-bar {
-  background-color: #ffffff;
-}
-
 /* ==================== 录屏主题定制 ==================== */
 
 /* 1. 经典白底 (Light) */
@@ -2638,7 +2478,6 @@ select {
 .god-mode-view.theme-light .down-part {
   background-color: #f8fafc;
   color: #334155;
-  border-top: 1px solid #e2e8f0;
 }
 
 /* 2. 暗黑模式 (Dark) */
@@ -2662,7 +2501,6 @@ select {
 .god-mode-view.theme-dark .down-part {
   background-color: #181820;
   color: #e2e8f0;
-  border-top: 1px solid #2a2a36;
 }
 .god-mode-view.theme-dark .down-part .god-char-block.is-hidden {
   background-color: #242430;
