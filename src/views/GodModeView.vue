@@ -311,6 +311,14 @@
           🗑️ 清空序列
         </button>
         <button
+          class="btn btn-xs export-current-btn"
+          :disabled="isExporting"
+          @click="exportCurrentFrame"
+          title="不开启/不依赖顺序序列，直接将呈现区当前画面导出为一张 1920p 图片"
+        >
+          📷 导出当前画面
+        </button>
+        <button
           class="btn btn-xs btn-primary export-btn"
           :disabled="clickSequence.length === 0 || isExporting"
           @click="openExportModal"
@@ -1017,6 +1025,45 @@ export default defineComponent({
       return blob
     }
 
+    // 导出当前画面（无需开启/不依赖顺序序列，直接将呈现区当前状态导出为一张 1920p 图片）
+    const exportCurrentFrame = async () => {
+      if (isExporting.value) return
+      hoveredChar.value = null
+      isExporting.value = true
+
+      try {
+        showToast('正在导出当前画面 1920p 高清图片...', 'info')
+
+        if (!sessionFontEmbedCSS && upPartRef.value) {
+          try {
+            sessionFontEmbedCSS = await getFontEmbedCSS(upPartRef.value, {
+              preferredFontFormat: 'woff2'
+            })
+          } catch (e) {
+            console.warn('获取字体嵌入样式失败:', e)
+          }
+        }
+
+        const safeTitle = (titleText.value.trim() || '未命名文章').replace(/[\\/:*?"<>|]/g, '_')
+        const filename = `${safeTitle}_当前画面.png`
+        const blob = await captureUpPartBlob()
+
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = filename
+        link.click()
+        setTimeout(() => URL.revokeObjectURL(url), 5000)
+
+        showToast(`🎉 已成功导出当前画面：${filename}`, 'success')
+      } catch (err: any) {
+        console.error('导出当前画面失败:', err)
+        showToast(`导出失败: ${err.message || '渲染异常'}`, 'warning')
+      } finally {
+        isExporting.value = false
+      }
+    }
+
     // 打开批量导出配置弹窗
     const openExportModal = () => {
       if (clickSequence.value.length === 0) {
@@ -1445,6 +1492,7 @@ export default defineComponent({
       clearSequence,
       previewStep,
       toggleRecording,
+      exportCurrentFrame,
       openExportModal,
       startExport
     }
@@ -1887,6 +1935,22 @@ select {
   gap: 8px;
   flex-shrink: 0;
   margin-left: auto;
+}
+
+.export-current-btn {
+  background-color: #0f766e;
+  border: 1px solid #14b8a6;
+  color: #ccfbf1;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(13, 148, 136, 0.3);
+}
+
+.export-current-btn:hover:not(:disabled) {
+  background-color: #0d9488;
+  border-color: #2dd4bf;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.45);
+  transform: translateY(-1px);
 }
 
 .export-btn {
