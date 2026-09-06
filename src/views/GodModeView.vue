@@ -240,6 +240,73 @@
       </div>
     </div>
 
+    <!-- 点开顺序序列工具栏 (Sequence Recording & Export Bar) -->
+    <div class="sequence-toolbar">
+      <div class="seq-left">
+        <span class="seq-title">
+          🎬 点开顺序序列 <span class="seq-badge">{{ clickSequence.length }} 步</span>
+        </span>
+        <button
+          class="btn btn-xs seq-record-btn"
+          :class="{ active: isRecordingSequence }"
+          @click="toggleRecording"
+          :title="isRecordingSequence ? '点击暂停录制点击顺序 (快捷键: 空格 或 R)' : '点击恢复录制点击顺序 (快捷键: 空格 或 R)'"
+        >
+          <span class="record-dot" :class="{ pulsating: isRecordingSequence }">●</span>
+          {{ isRecordingSequence ? '正在录制 (空格/R)' : '录制已暂停 (空格/R)' }}
+        </button>
+      </div>
+
+      <!-- 步骤序列水平滚动标签 -->
+      <div class="seq-scroll-container">
+        <div v-if="clickSequence.length === 0" class="seq-empty-tip">
+          👆 点击黑方块或参考区明文，将按点击顺序自动记录步骤序列，可一键批量导出 1920p 图片
+        </div>
+        <div
+          v-for="(step, idx) in clickSequence"
+          :key="step.id"
+          class="seq-step-item"
+          :class="{ active: currentPreviewStepIndex === idx }"
+          @click="previewStep(idx)"
+          @mouseenter="setHoveredChar(step.char)"
+          @mouseleave="clearHoveredChar"
+          :title="`第 ${step.order} 步：点开【${step.char}】(出现 ${step.count} 次) - 点击可预览此画面`"
+        >
+          <span class="step-num">{{ String(step.order).padStart(2, '0') }}</span>
+          <span class="step-char">{{ step.char }}</span>
+          <span class="step-count">x{{ step.count }}</span>
+          <span class="step-delete" @click.stop="removeStep(idx)" title="移除此步">×</span>
+        </div>
+      </div>
+
+      <div class="seq-actions">
+        <button
+          class="btn btn-xs"
+          :disabled="clickSequence.length === 0"
+          @click="undoLastStep"
+          title="撤回序列最后一步"
+        >
+          ↩️ 撤回一步
+        </button>
+        <button
+          class="btn btn-xs"
+          :disabled="clickSequence.length === 0"
+          @click="clearSequence"
+          title="清空全部记录的顺序"
+        >
+          🗑️ 清空序列
+        </button>
+        <button
+          class="btn btn-xs btn-primary export-btn"
+          :disabled="clickSequence.length === 0 || isExporting"
+          @click="openExportModal"
+          title="将当前点开顺序逐帧导出为 1920p 图片组"
+        >
+          📸 批量导出图片 ({{ clickSequence.length }} 张)
+        </button>
+      </div>
+    </div>
+
     <!-- 主舞台滚动容器（支持适应窗口与1:1滚动） -->
     <main
       ref="stageWrapperRef"
@@ -281,6 +348,7 @@
         >
           <!-- 1. 上半部分：呈现区（黑方块遮罩模式，模拟视频画面） -->
           <section
+            ref="upPartRef"
             class="box-part up-part"
             :class="{ 'has-boarder': showBoarder }"
             :style="{ height: `${upPartHeight}px`, fontSize: `${fontSize}px` }"
@@ -446,14 +514,118 @@
         {{ notification.message }}
       </div>
     </transition>
+
+    <!-- 批量导出模态弹窗 (Export Modal) -->
+    <div v-if="exportModalVisible" class="modal-overlay" @click.self="!isExporting && (exportModalVisible = false)">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>📸 批量导出“视频呈现区”1920p图片序列</h3>
+          <button class="modal-close" :disabled="isExporting" @click="exportModalVisible = false">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="export-summary-box">
+            <div class="summary-item">
+              <span class="label">🎯 导出目标:</span>
+              <span class="val">视频呈现区 (Game View)</span>
+            </div>
+            <div class="summary-item">
+              <span class="label">📐 输出规格:</span>
+              <span class="val font-bold">固定宽 1920px × 当前高 {{ upPartHeight }}px</span>
+            </div>
+            <div class="summary-item">
+              <span class="label">📑 对应文章:</span>
+              <span class="val font-bold">{{ titleText || '未命名文章' }}</span>
+            </div>
+            <div class="summary-item">
+              <span class="label">🎞️ 导出总帧数:</span>
+              <span class="val highlight">{{ clickSequence.length + (includeInitialFrame ? 1 : 0) }} 张图片</span>
+            </div>
+          </div>
+
+          <div class="export-options">
+            <label class="option-check">
+              <input type="checkbox" v-model="includeInitialFrame" :disabled="isExporting" />
+              <span>包含第 00 步（全遮罩未点开初始画面：<code>00_{{ titleText || '标题' }}_初始.png</code>）</span>
+            </label>
+
+            <div class="option-group">
+              <label class="group-title">📦 下载方式:</label>
+              <div class="radio-row">
+                <label class="radio-label">
+                  <input type="radio" :value="true" v-model="exportAsZip" :disabled="isExporting" />
+                  <span>打包为 ZIP 压缩包 (推荐，单个文件收录所有命名图片)</span>
+                </label>
+                <label class="radio-label">
+                  <input type="radio" :value="false" v-model="exportAsZip" :disabled="isExporting" />
+                  <span>逐张直接下载 PNG 图片</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="naming-preview-box">
+              <span class="naming-title">📁 文件命名规则预览：</span>
+              <ul class="naming-list">
+                <li v-if="includeInitialFrame">
+                  <span class="badge">00</span> 00_{{ titleText || '标题' }}_初始.png
+                </li>
+                <li v-for="(step, idx) in clickSequence.slice(0, 3)" :key="step.id">
+                  <span class="badge">{{ String(idx + 1).padStart(2, '0') }}</span>
+                  {{ String(idx + 1).padStart(2, '0') }}_{{ titleText || '标题' }}_{{ step.char }}.png
+                </li>
+                <li v-if="clickSequence.length > 3" class="more-steps">
+                  ... 及后续 {{ clickSequence.length - 3 }} 张点开字符图片
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- 导出进度条展示 -->
+          <div v-if="isExporting" class="export-progress-area">
+            <div class="progress-bar-container">
+              <div class="progress-bar-fill" :style="{ width: `${exportProgress}%` }"></div>
+            </div>
+            <div class="progress-status">
+              <span class="spinner">⏳</span>
+              <span class="status-text">{{ exportStatusText }}</span>
+              <span class="percent">{{ exportProgress }}%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn" :disabled="isExporting" @click="exportModalVisible = false">
+            取消
+          </button>
+          <button
+            class="btn btn-primary btn-lg"
+            :disabled="isExporting || clickSequence.length === 0"
+            @click="startExport"
+          >
+            {{ isExporting ? '正在生成并导出...' : '🚀 开始生成并导出' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { defineComponent, ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { isSymbol, processText } from '@/utils/textProcessor'
 import { CharInfo } from '@/types/game'
 import questionBoarderSvg from '@/assets/question-boarder.svg'
+import { toPng } from 'html-to-image'
+import JSZip from 'jszip'
+
+// 点开顺序步骤数据接口
+export interface ClickSequenceStep {
+  id: number
+  order: number
+  char: string
+  revealedSnapshot: string[]
+  count: number
+}
 
 export default defineComponent({
   name: 'GodModeView',
@@ -466,6 +638,20 @@ export default defineComponent({
     const fileInputRef = ref<HTMLInputElement | null>(null)
     const stageWrapperRef = ref<HTMLElement | null>(null)
     const screenBoxRef = ref<HTMLElement | null>(null)
+    const upPartRef = ref<HTMLElement | null>(null)
+
+    // 点开顺序序列追踪
+    const clickSequence = ref<ClickSequenceStep[]>([])
+    const isRecordingSequence = ref(true)
+    const currentPreviewStepIndex = ref<number | null>(null)
+
+    // 批量导出配置与状态
+    const exportModalVisible = ref(false)
+    const isExporting = ref(false)
+    const exportProgress = ref(0)
+    const exportStatusText = ref('')
+    const includeInitialFrame = ref(true)
+    const exportAsZip = ref(true)
 
     const isDragOver = ref(false)
     const currentFileName = ref('')
@@ -647,8 +833,10 @@ export default defineComponent({
       titleChars.value = processText(titleText.value)
       contentChars.value = processText(contentText.value)
 
-      // 重置揭示状态与历史
+      // 重置揭示状态与历史及序列
       revealedCharSet.value.clear()
+      clickSequence.value = []
+      currentPreviewStepIndex.value = null
       historyStack.value = [[]]
       historyIndex.value = 0
 
@@ -668,6 +856,67 @@ export default defineComponent({
       loadText(`${sampleTitle}\n${sampleContent}`, '示例.txt')
     }
 
+    // 记录点击步骤到序列
+    const recordSequenceStep = (char: string) => {
+      const key = getCharKey(char)
+      const existing = clickSequence.value.find(s => getCharKey(s.char) === key)
+      if (existing) {
+        existing.revealedSnapshot = Array.from(revealedCharSet.value)
+        return
+      }
+
+      const count = allChars.value.filter(c => getCharKey(c.char) === key).length
+      clickSequence.value.push({
+        id: Date.now() + Math.random(),
+        order: clickSequence.value.length + 1,
+        char,
+        revealedSnapshot: Array.from(revealedCharSet.value),
+        count
+      })
+    }
+
+    // 撤回序列最后一步
+    const undoLastStep = () => {
+      if (clickSequence.value.length === 0) return
+      const removed = clickSequence.value.pop()
+      if (clickSequence.value.length === 0) {
+        revealedCharSet.value.clear()
+      } else {
+        const lastStep = clickSequence.value[clickSequence.value.length - 1]
+        revealedCharSet.value = new Set(lastStep.revealedSnapshot)
+      }
+      saveStateToHistory()
+      showToast(`已撤回序列最后一步【${removed?.char}】`)
+    }
+
+    // 删除序列中的指定步骤
+    const removeStep = (idx: number) => {
+      if (idx < 0 || idx >= clickSequence.value.length) return
+      const removed = clickSequence.value.splice(idx, 1)[0]
+      clickSequence.value.forEach((s, i) => (s.order = i + 1))
+      if (removed) {
+        revealedCharSet.value.delete(getCharKey(removed.char))
+      }
+      saveStateToHistory()
+      showToast(`已移除第 ${idx + 1} 步【${removed?.char}】`)
+    }
+
+    // 清空序列
+    const clearSequence = () => {
+      clickSequence.value = []
+      currentPreviewStepIndex.value = null
+      showToast('已清空点开顺序序列')
+    }
+
+    // 预览某一步骤状态
+    const previewStep = (idx: number) => {
+      if (idx < 0 || idx >= clickSequence.value.length) return
+      const step = clickSequence.value[idx]
+      revealedCharSet.value = new Set(step.revealedSnapshot)
+      currentPreviewStepIndex.value = idx
+      showToast(`正在预览第 ${step.order} 步画面（点开【${step.char}】）`)
+    }
+
     // 字符点击处理
     const handleCharClick = (char: string) => {
       if (isSymbol(char)) return
@@ -678,19 +927,191 @@ export default defineComponent({
       if (clickMode.value === 'toggle') {
         if (isAlreadyRevealed) {
           revealedCharSet.value.delete(key)
+          if (isRecordingSequence.value) {
+            const idx = clickSequence.value.findIndex(s => getCharKey(s.char) === key)
+            if (idx !== -1) {
+              clickSequence.value.splice(idx, 1)
+              clickSequence.value.forEach((s, i) => (s.order = i + 1))
+            }
+          }
           showToast(`已隐藏字符: "${char}"`)
         } else {
           revealedCharSet.value.add(key)
+          if (isRecordingSequence.value) {
+            recordSequenceStep(char)
+          }
           showToast(`已揭示字符: "${char}"`)
         }
       } else {
         if (!isAlreadyRevealed) {
           revealedCharSet.value.add(key)
+          if (isRecordingSequence.value) {
+            recordSequenceStep(char)
+          }
           showToast(`已揭示字符: "${char}"`)
         }
       }
 
       saveStateToHistory()
+    }
+
+    // 获取当前录屏主题对应的背景色
+    const getThemeBackgroundColor = () => {
+      switch (theme.value) {
+        case 'theme-dark':
+          return '#121216'
+        case 'theme-green':
+          return '#00ff00'
+        case 'theme-blue':
+          return '#0000ff'
+        case 'theme-transparent':
+          return undefined
+        case 'theme-light':
+        default:
+          return '#ffffff'
+      }
+    }
+
+    // 捕获呈现区 1920p 画面为 PNG Data URL
+    const captureUpPartFrame = async (): Promise<string> => {
+      if (!upPartRef.value) {
+        throw new Error('未找到呈现区 DOM 元素')
+      }
+
+      await nextTick()
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      const bg = getThemeBackgroundColor()
+      return await toPng(upPartRef.value, {
+        width: 1920,
+        height: upPartHeight.value,
+        pixelRatio: 1,
+        cacheBust: false,
+        backgroundColor: bg
+      })
+    }
+
+    const downloadDataUrl = (dataUrl: string, filename: string) => {
+      const link = document.createElement('a')
+      link.href = dataUrl
+      link.download = filename
+      link.click()
+    }
+
+    // 打开批量导出配置弹窗
+    const openExportModal = () => {
+      if (clickSequence.value.length === 0) {
+        showToast('当前尚未记录点开顺序，请先在文字上点击字符', 'warning')
+        return
+      }
+      exportModalVisible.value = true
+    }
+
+    // 开始执行批量导出
+    const startExport = async () => {
+      if (clickSequence.value.length === 0 || isExporting.value) return
+
+      const originalRevealedState = new Set(revealedCharSet.value)
+      isExporting.value = true
+      exportProgress.value = 0
+      exportStatusText.value = '准备渲染...'
+
+      const safeTitle = (titleText.value.trim() || '未命名文章').replace(/[\\/:*?"<>|]/g, '_')
+      const totalSteps = clickSequence.value.length + (includeInitialFrame.value ? 1 : 0)
+      let completedSteps = 0
+
+      try {
+        if (exportAsZip.value) {
+          const zip = new JSZip()
+          const folder = zip.folder(`${safeTitle}_点开序列_1920p`) || zip
+
+          // 1. 若勾选，先渲染第 00 步（初始全遮罩）
+          if (includeInitialFrame.value) {
+            exportStatusText.value = `正在渲染第 00 步: 00_${safeTitle}_初始.png (1 / ${totalSteps})`
+            revealedCharSet.value = new Set()
+            const dataUrl = await captureUpPartFrame()
+            const base64Data = dataUrl.split(',')[1]
+            folder.file(`00_${safeTitle}_初始.png`, base64Data, { base64: true })
+            completedSteps++
+            exportProgress.value = Math.round((completedSteps / totalSteps) * 90)
+          }
+
+          // 2. 逐帧渲染记录的每个点开步骤
+          for (let i = 0; i < clickSequence.value.length; i++) {
+            const step = clickSequence.value[i]
+            const orderStr = String(step.order).padStart(2, '0')
+            const safeChar = step.char.replace(/[\\/:*?"<>|]/g, '_')
+            const filename = `${orderStr}_${safeTitle}_${safeChar}.png`
+
+            exportStatusText.value = `正在渲染第 ${orderStr} 步: ${filename} (${completedSteps + 1} / ${totalSteps})`
+            revealedCharSet.value = new Set(step.revealedSnapshot)
+
+            const dataUrl = await captureUpPartFrame()
+            const base64Data = dataUrl.split(',')[1]
+            folder.file(filename, base64Data, { base64: true })
+
+            completedSteps++
+            exportProgress.value = Math.round((completedSteps / totalSteps) * 90)
+          }
+
+          // 3. 生成 ZIP 压缩包并下载
+          exportStatusText.value = '正在打包 ZIP 压缩文件，请稍候...'
+          const zipBlob = await zip.generateAsync(
+            { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
+            (metadata) => {
+              exportProgress.value = 90 + Math.round(metadata.percent * 0.1)
+            }
+          )
+
+          const downloadUrl = URL.createObjectURL(zipBlob)
+          const link = document.createElement('a')
+          link.href = downloadUrl
+          link.download = `${safeTitle}_点开序列_1920p.zip`
+          link.click()
+          URL.revokeObjectURL(downloadUrl)
+        } else {
+          // 逐张单独下载 PNG
+          if (includeInitialFrame.value) {
+            exportStatusText.value = `正在导出: 00_${safeTitle}_初始.png (1 / ${totalSteps})`
+            revealedCharSet.value = new Set()
+            const dataUrl = await captureUpPartFrame()
+            downloadDataUrl(dataUrl, `00_${safeTitle}_初始.png`)
+            completedSteps++
+            exportProgress.value = Math.round((completedSteps / totalSteps) * 100)
+            await new Promise(resolve => setTimeout(resolve, 250))
+          }
+
+          for (let i = 0; i < clickSequence.value.length; i++) {
+            const step = clickSequence.value[i]
+            const orderStr = String(step.order).padStart(2, '0')
+            const safeChar = step.char.replace(/[\\/:*?"<>|]/g, '_')
+            const filename = `${orderStr}_${safeTitle}_${safeChar}.png`
+
+            exportStatusText.value = `正在导出: ${filename} (${completedSteps + 1} / ${totalSteps})`
+            revealedCharSet.value = new Set(step.revealedSnapshot)
+
+            const dataUrl = await captureUpPartFrame()
+            downloadDataUrl(dataUrl, filename)
+
+            completedSteps++
+            exportProgress.value = Math.round((completedSteps / totalSteps) * 100)
+            await new Promise(resolve => setTimeout(resolve, 250))
+          }
+        }
+
+        exportProgress.value = 100
+        exportStatusText.value = '导出完成！'
+        showToast(`🎉 成功导出 ${totalSteps} 张 1920p 高清图片！`, 'success')
+        setTimeout(() => {
+          exportModalVisible.value = false
+        }, 600)
+      } catch (err: any) {
+        console.error('导出失败:', err)
+        showToast(`导出失败: ${err.message || '渲染异常'}`, 'warning')
+      } finally {
+        isExporting.value = false
+        revealedCharSet.value = originalRevealedState
+      }
     }
 
     // 批量操作
@@ -702,6 +1123,8 @@ export default defineComponent({
 
     const hideAll = () => {
       revealedCharSet.value.clear()
+      clickSequence.value = []
+      currentPreviewStepIndex.value = null
       saveStateToHistory()
       showToast('已全部隐藏')
     }
@@ -809,20 +1232,20 @@ export default defineComponent({
     })
 
     const scalerContainerStyle = computed(() => {
-      const scale = currentScale.value
+      const scale = isExporting.value ? 1 : currentScale.value
       const scaledHeight = (isAutoHeight.value ? 'auto' : `${Math.round(boxHeight.value * scale)}px`)
       return {
-        width: `${Math.round(1920 * scale)}px`,
+        width: isExporting.value ? '1920px' : `${Math.round(1920 * scale)}px`,
         height: scaledHeight
       }
     })
 
     const screenBoxStyle = computed(() => {
-      const scale = currentScale.value
+      const scale = isExporting.value ? 1 : currentScale.value
       return {
         width: '1920px',
         height: isAutoHeight.value ? 'auto' : `${boxHeight.value}px`,
-        transform: `scale(${scale})`,
+        transform: isExporting.value ? 'none' : `scale(${scale})`,
         transformOrigin: 'top left'
       }
     })
@@ -898,8 +1321,52 @@ export default defineComponent({
       document.body.style.cursor = ''
     }
 
-    // 键盘快捷键监听 (Ctrl+Z / Ctrl+Y)
+    // 切换录制开启 / 暂停状态
+    const toggleRecording = () => {
+      isRecordingSequence.value = !isRecordingSequence.value
+      showToast(
+        isRecordingSequence.value
+          ? '⏺️ 已开始录制点开顺序 (快捷键: 空格 或 R 键可暂停)'
+          : '⏸️ 已暂停录制点开顺序 (快捷键: 空格 或 R 键可恢复)',
+        isRecordingSequence.value ? 'success' : 'info'
+      )
+    }
+
+    // 键盘全局快捷键监听 (Ctrl+Z / Ctrl+Y / Space / R / Ctrl+E / Esc)
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      const isInputFocused =
+        target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+
+      // Esc 键: 关闭导出弹窗
+      if (e.key === 'Escape') {
+        if (exportModalVisible.value && !isExporting.value) {
+          exportModalVisible.value = false
+          e.preventDefault()
+          return
+        }
+      }
+
+      // 如果当前聚焦在文本输入框/数字框，不触发录制全局快捷键
+      if (isInputFocused) return
+
+      // 空格键 (Space) 或 R 键: 开始 / 暂停点开顺序录制 (Start / Stop Recording)
+      if (e.key === ' ' || e.key.toLowerCase() === 'r') {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          toggleRecording()
+          e.preventDefault()
+          return
+        }
+      }
+
+      // Ctrl + E: 快捷打开批量导出图片弹窗
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
+        openExportModal()
+        e.preventDefault()
+        return
+      }
+
+      // 撤销 / 重做 (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z)
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         if (e.shiftKey) {
           redo()
@@ -998,7 +1465,24 @@ export default defineComponent({
       onUpHeightInputChange,
       onDownHeightInputChange,
       startDividerDrag,
-      startBoxResizeDrag
+      startBoxResizeDrag,
+      upPartRef,
+      clickSequence,
+      isRecordingSequence,
+      currentPreviewStepIndex,
+      exportModalVisible,
+      isExporting,
+      exportProgress,
+      exportStatusText,
+      includeInitialFrame,
+      exportAsZip,
+      undoLastStep,
+      removeStep,
+      clearSequence,
+      previewStep,
+      toggleRecording,
+      openExportModal,
+      startExport
     }
   }
 })
@@ -1279,6 +1763,442 @@ select {
 .dim-hint {
   color: #64748b;
   font-size: 11px;
+}
+
+/* ==================== 点开顺序序列工具栏 ==================== */
+.sequence-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 6px 16px;
+  background-color: #14161f;
+  border-bottom: 1px solid #232738;
+  gap: 12px;
+  flex-shrink: 0;
+  user-select: none;
+  overflow-x: auto;
+}
+
+.seq-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.seq-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.seq-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background-color: #2563eb;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.seq-record-btn {
+  background-color: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.seq-record-btn.active {
+  background-color: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #86efac;
+}
+
+.record-dot {
+  font-size: 10px;
+}
+
+.record-dot.pulsating {
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* 序列横向滑动容器 */
+.seq-scroll-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 4px;
+  min-height: 32px;
+}
+
+.seq-empty-tip {
+  font-size: 12px;
+  color: #64748b;
+  font-style: italic;
+  white-space: nowrap;
+}
+
+.seq-step-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  color: #e2e8f0;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.seq-step-item:hover {
+  background-color: #334155;
+  border-color: #38bdf8;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.seq-step-item.active {
+  background-color: #0369a1;
+  border-color: #38bdf8;
+  color: #ffffff;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.4);
+}
+
+.step-num {
+  font-size: 10px;
+  font-family: monospace;
+  background-color: #0f172a;
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.step-char {
+  font-weight: 700;
+  color: #f8fafc;
+  font-size: 13px;
+}
+
+.step-count {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.step-delete {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-left: 2px;
+  border-radius: 50%;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.step-delete:hover {
+  background-color: #ef4444;
+  color: #ffffff;
+}
+
+.seq-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.export-btn {
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  border: none;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
+}
+
+.export-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1d4ed8, #6d28d9);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.45);
+  transform: translateY(-1px);
+}
+
+/* ==================== 批量导出弹窗 ==================== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal-dialog {
+  background-color: #1e2230;
+  border: 1px solid #3b4261;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 580px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalIn 0.2s ease-out;
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #2d3142;
+  background-color: #181a24;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.modal-close:hover {
+  color: #ffffff;
+}
+
+.modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 75vh;
+  overflow-y: auto;
+}
+
+.export-summary-box {
+  background-color: #13151f;
+  border: 1px solid #282c3f;
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.summary-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.summary-item .label {
+  color: #94a3b8;
+}
+
+.summary-item .val {
+  color: #e2e8f0;
+}
+
+.summary-item .highlight {
+  color: #38bdf8;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.export-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.option-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.option-check code {
+  background-color: #0f172a;
+  color: #38bdf8;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.option-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.radio-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 8px;
+}
+
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #cbd5e1;
+  cursor: pointer;
+}
+
+.naming-preview-box {
+  background-color: #13151f;
+  border: 1px solid #282c3f;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.naming-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.naming-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-family: monospace;
+  color: #a5b4fc;
+}
+
+.naming-list .badge {
+  background-color: #312e81;
+  color: #c7d2fe;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  margin-right: 4px;
+}
+
+.more-steps {
+  color: #64748b;
+  font-style: italic;
+  padding-top: 2px;
+}
+
+/* 导出进度条 */
+.export-progress-area {
+  background-color: #13151f;
+  border: 1px solid #282c3f;
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress-bar-container {
+  height: 8px;
+  background-color: #0f172a;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #38bdf8, #818cf8);
+  transition: width 0.2s ease;
+}
+
+.progress-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.progress-status .spinner {
+  font-size: 14px;
+  margin-right: 6px;
+}
+
+.progress-status .status-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress-status .percent {
+  font-weight: 700;
+  color: #38bdf8;
+  font-family: monospace;
+  margin-left: 8px;
+}
+
+.modal-footer {
+  padding: 14px 20px;
+  border-top: 1px solid #2d3142;
+  background-color: #181a24;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.btn-lg {
+  padding: 8px 18px;
+  font-size: 14px;
 }
 
 /* 舞台视口滚动容器 */
