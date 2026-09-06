@@ -360,7 +360,7 @@
           >
             <!-- 题目边框装饰图层 (Question Boarder SVG) -->
             <div v-if="showBoarder" class="question-boarder-layer">
-              <img :src="questionBoarderSvg" class="boarder-svg-img" alt="Question Border Frame" />
+              <img :src="boarderDataUrl" class="boarder-svg-img" alt="Question Border Frame" />
             </div>
 
             <div class="text-content-scroll" :class="{ 'with-boarder': showBoarder }" :style="textScrollStyle">
@@ -611,7 +611,7 @@ import { defineComponent, ref, reactive, computed, onMounted, onUnmounted, nextT
 import { isSymbol, processText } from '@/utils/textProcessor'
 import { CharInfo } from '@/types/game'
 import questionBoarderSvg from '@/assets/question-boarder.svg'
-import { toPng } from 'html-to-image'
+import { toPng, toBlob, getFontEmbedCSS } from 'html-to-image'
 import JSZip from 'jszip'
 
 // 点开顺序步骤数据接口
@@ -659,6 +659,8 @@ export default defineComponent({
     // 题目边框与录屏指示器配置
     const showBoarder = ref(true)
     const hideIndicators = ref(false)
+    const boarderDataUrl = ref<string>(questionBoarderSvg)
+    let sessionFontEmbedCSS: string | undefined = undefined
 
     // 已揭示的字符集合（统一转小写规范匹配，英文字母大小写全解，中文字符直接匹配）
     const revealedCharSet = ref<Set<string>>(new Set())
@@ -972,24 +974,25 @@ export default defineComponent({
       }
     }
 
-    // 捕获呈现区 1920p 画面为 PNG Data URL
-    const captureUpPartFrame = async (): Promise<string> => {
+    // 捕获呈现区 1920p 画面为 PNG Blob（直接生成二进制 Blob，避免 Base64 巨大内存转换开销，并复用预编译字体样式）
+    const captureUpPartBlob = async (): Promise<Blob> => {
       if (!upPartRef.value) {
         throw new Error('未找到呈现区 DOM 元素')
       }
 
       await nextTick()
-      await new Promise(resolve => setTimeout(resolve, 80))
+      await new Promise(resolve => requestAnimationFrame(resolve))
 
       const bg = getThemeBackgroundColor()
       // 当开启边框时，边框SVG应完整铺满整个画面，底色设为透明以杜绝任何底色白边漏出；若未开启边框，则填充对应录屏主题底色
       const canvasBg = showBoarder.value ? undefined : bg
 
-      return await toPng(upPartRef.value, {
+      const blob = await toBlob(upPartRef.value, {
         width: 1920,
         height: boxHeight.value,
         pixelRatio: 1,
         cacheBust: false,
+        fontEmbedCSS: sessionFontEmbedCSS,
         backgroundColor: canvasBg,
         style: {
           width: '1920px',
@@ -1006,13 +1009,12 @@ export default defineComponent({
           boxShadow: 'none'
         }
       })
-    }
 
-    const downloadDataUrl = (dataUrl: string, filename: string) => {
-      const link = document.createElement('a')
-      link.href = dataUrl
-      link.download = filename
-      link.click()
+      if (!blob) {
+        throw new Error('生成图片失败')
+      }
+
+      return blob
     }
 
     // 打开批量导出配置弹窗
@@ -1039,22 +1041,33 @@ export default defineComponent({
       let completedSteps = 0
 
       try {
+        // 1. 首次导出预先编译并缓存字体样式（避免逐帧解析上百条 @font-face 规则，加速 20~30 倍）
+        if (!sessionFontEmbedCSS && upPartRef.value) {
+          exportStatusText.value = '正在预编译高清字体资源 (仅初次需数秒)...'
+          try {
+            sessionFontEmbedCSS = await getFontEmbedCSS(upPartRef.value, {
+              preferredFontFormat: 'woff2'
+            })
+          } catch (e) {
+            console.warn('获取字体嵌入样式失败，将自动降级:', e)
+          }
+        }
+
         if (exportAsZip.value) {
           const zip = new JSZip()
           const folder = zip.folder(`${safeTitle}_点开序列_1920p`) || zip
 
-          // 1. 若勾选，先渲染第 00 步（初始全遮罩）
+          // 若勾选，先渲染第 00 步（初始全遮罩）
           if (includeInitialFrame.value) {
             exportStatusText.value = `正在渲染第 00 步: 00_${safeTitle}_初始.png (1 / ${totalSteps})`
             revealedCharSet.value = new Set()
-            const dataUrl = await captureUpPartFrame()
-            const base64Data = dataUrl.split(',')[1]
-            folder.file(`00_${safeTitle}_初始.png`, base64Data, { base64: true })
+            const blob = await captureUpPartBlob()
+            folder.file(`00_${safeTitle}_初始.png`, blob)
             completedSteps++
             exportProgress.value = Math.round((completedSteps / totalSteps) * 90)
           }
 
-          // 2. 逐帧渲染记录的每个点开步骤
+          // 逐帧渲染记录的每个点开步骤（直接以 Blob 存入 zip，零 Base64 转换开销）
           for (let i = 0; i < clickSequence.value.length; i++) {
             const step = clickSequence.value[i]
             const orderStr = String(step.order).padStart(2, '0')
@@ -1064,18 +1077,17 @@ export default defineComponent({
             exportStatusText.value = `正在渲染第 ${orderStr} 步: ${filename} (${completedSteps + 1} / ${totalSteps})`
             revealedCharSet.value = new Set(step.revealedSnapshot)
 
-            const dataUrl = await captureUpPartFrame()
-            const base64Data = dataUrl.split(',')[1]
-            folder.file(filename, base64Data, { base64: true })
+            const blob = await captureUpPartBlob()
+            folder.file(filename, blob)
 
             completedSteps++
             exportProgress.value = Math.round((completedSteps / totalSteps) * 90)
           }
 
-          // 3. 生成 ZIP 压缩包并下载
-          exportStatusText.value = '正在打包 ZIP 压缩文件，请稍候...'
+          // 生成 ZIP 压缩包并下载（PNG已自身具备极高压缩比，使用 STORE 模式秒级打包，杜绝 JS 重复压缩卡死）
+          exportStatusText.value = '正在快速打包 ZIP 压缩文件...'
           const zipBlob = await zip.generateAsync(
-            { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
+            { type: 'blob', compression: 'STORE' },
             (metadata) => {
               exportProgress.value = 90 + Math.round(metadata.percent * 0.1)
             }
@@ -1086,17 +1098,26 @@ export default defineComponent({
           link.href = downloadUrl
           link.download = `${safeTitle}_点开序列_1920p.zip`
           link.click()
-          URL.revokeObjectURL(downloadUrl)
+          setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000)
         } else {
           // 逐张单独下载 PNG
+          const downloadBlob = (blob: Blob, filename: string) => {
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = filename
+            link.click()
+            setTimeout(() => URL.revokeObjectURL(url), 5000)
+          }
+
           if (includeInitialFrame.value) {
             exportStatusText.value = `正在导出: 00_${safeTitle}_初始.png (1 / ${totalSteps})`
             revealedCharSet.value = new Set()
-            const dataUrl = await captureUpPartFrame()
-            downloadDataUrl(dataUrl, `00_${safeTitle}_初始.png`)
+            const blob = await captureUpPartBlob()
+            downloadBlob(blob, `00_${safeTitle}_初始.png`)
             completedSteps++
             exportProgress.value = Math.round((completedSteps / totalSteps) * 100)
-            await new Promise(resolve => setTimeout(resolve, 250))
+            await new Promise(resolve => setTimeout(resolve, 80))
           }
 
           for (let i = 0; i < clickSequence.value.length; i++) {
@@ -1108,12 +1129,12 @@ export default defineComponent({
             exportStatusText.value = `正在导出: ${filename} (${completedSteps + 1} / ${totalSteps})`
             revealedCharSet.value = new Set(step.revealedSnapshot)
 
-            const dataUrl = await captureUpPartFrame()
-            downloadDataUrl(dataUrl, filename)
+            const blob = await captureUpPartBlob()
+            downloadBlob(blob, filename)
 
             completedSteps++
             exportProgress.value = Math.round((completedSteps / totalSteps) * 100)
-            await new Promise(resolve => setTimeout(resolve, 250))
+            await new Promise(resolve => setTimeout(resolve, 80))
           }
         }
 
@@ -1327,6 +1348,22 @@ export default defineComponent({
       updateFitScale()
       window.addEventListener('resize', updateFitScale)
       window.addEventListener('keydown', handleKeyDown)
+
+      // 预先将题目边框 SVG 转换为 Data URL，避免导出逐帧重复网络请求
+      if (questionBoarderSvg && !questionBoarderSvg.startsWith('data:')) {
+        fetch(questionBoarderSvg)
+          .then(res => res.blob())
+          .then(blob => {
+            const reader = new FileReader()
+            reader.onloadend = () => {
+              if (typeof reader.result === 'string') {
+                boarderDataUrl.value = reader.result
+              }
+            }
+            reader.readAsDataURL(blob)
+          })
+          .catch(() => {})
+      }
     })
 
     onUnmounted(() => {
@@ -1388,6 +1425,7 @@ export default defineComponent({
       showBoarder,
       hideIndicators,
       questionBoarderSvg,
+      boarderDataUrl,
       isNativeBoarderHeight,
       setBoarderNativeSize,
       setBoxHeight,
