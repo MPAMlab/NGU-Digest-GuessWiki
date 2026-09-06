@@ -194,8 +194,9 @@ export default defineComponent({
       gameState.fileContent = fileContent
       gameState.players = players
 
-      // 处理文件内容
-      const lines = fileContent.split('\n').filter(line => line.trim())
+      // 处理文件内容（转为小写）
+      const normalizedContent = fileContent.toLowerCase()
+      const lines = normalizedContent.split('\n').filter(line => line.trim())
       gameState.title = lines[0].trim()
       gameState.content = lines.length > 1 ? lines.slice(1).join('\n').trim() : ''
 
@@ -209,7 +210,7 @@ export default defineComponent({
 
     // 处理猜字
     const handleGuess = () => {
-      const char = guessInput.value.trim()
+      const char = guessInput.value.trim().toLowerCase()
       if (!char) return
 
       isGuessing.value = true

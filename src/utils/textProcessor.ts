@@ -6,9 +6,10 @@ export function isSymbol(char: string): boolean {
   return symbolRegex.test(char)
 }
 
-// 处理文本，转换为字符信息数组
+// 处理文本，转换为字符信息数组（提前将所有大写转换为小写）
 export function processText(text: string): CharInfo[] {
-  return text.split('').map((char, index) => ({
+  const normalizedText = text.toLowerCase()
+  return normalizedText.split('').map((char, index) => ({
     char,
     index,
     isRevealed: isSymbol(char), // 符号默认显示

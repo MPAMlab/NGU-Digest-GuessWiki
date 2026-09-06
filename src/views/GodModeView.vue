@@ -818,9 +818,10 @@ export default defineComponent({
       }
     }
 
-    // 文本解析载入
+    // 文本解析载入（提前将所有大写字母转为小写）
     const loadText = (text: string, filename = '') => {
-      const lines = text.split(/\r?\n/).map(l => l.trimEnd())
+      const normalizedText = text.toLowerCase()
+      const lines = normalizedText.split(/\r?\n/).map(l => l.trimEnd())
       if (lines.length === 0 || !lines.some(l => l.trim())) {
         showToast('上传文件内容为空', 'warning')
         return
@@ -842,7 +843,7 @@ export default defineComponent({
 
       // 缓存到 sessionStorage
       try {
-        sessionStorage.setItem('godMode_text', text)
+        sessionStorage.setItem('godMode_text', normalizedText)
         sessionStorage.setItem('godMode_fileName', filename)
       } catch (e) {
         // ignore
@@ -979,15 +980,32 @@ export default defineComponent({
       }
 
       await nextTick()
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await new Promise(resolve => setTimeout(resolve, 80))
 
       const bg = getThemeBackgroundColor()
+      // 当开启边框时，边框SVG应完整铺满整个画面，底色设为透明以杜绝任何底色白边漏出；若未开启边框，则填充对应录屏主题底色
+      const canvasBg = showBoarder.value ? undefined : bg
+
       return await toPng(upPartRef.value, {
         width: 1920,
         height: upPartHeight.value,
         pixelRatio: 1,
         cacheBust: false,
-        backgroundColor: bg
+        backgroundColor: canvasBg,
+        style: {
+          width: '1920px',
+          minWidth: '1920px',
+          maxWidth: '1920px',
+          height: `${upPartHeight.value}px`,
+          minHeight: `${upPartHeight.value}px`,
+          maxHeight: `${upPartHeight.value}px`,
+          transform: 'none',
+          margin: '0',
+          padding: '0',
+          border: 'none',
+          outline: 'none',
+          boxShadow: 'none'
+        }
       })
     }
 
@@ -1011,6 +1029,7 @@ export default defineComponent({
     const startExport = async () => {
       if (clickSequence.value.length === 0 || isExporting.value) return
 
+      hoveredChar.value = null
       const originalRevealedState = new Set(revealedCharSet.value)
       isExporting.value = true
       exportProgress.value = 0
@@ -1498,7 +1517,7 @@ export default defineComponent({
   background-color: #1e1e24;
   color: #e2e8f0;
   overflow: hidden;
-  font-family: 'Noto Sans SC', sans-serif;
+  font-family: 'Noto Serif', 'Noto Sans SC', serif, sans-serif;
   user-select: none;
 }
 
@@ -2255,16 +2274,17 @@ select {
   display: flex;
   flex-direction: column;
   position: relative;
-  border: 2px solid #3b4261;
+  box-shadow: 0 0 0 2px #3b4261;
   border-radius: 6px;
   background-color: #ffffff;
   overflow: hidden;
-  box-sizing: border-box;
+  box-sizing: content-box;
 }
 
 /* 呈现区与参考区共用样式 */
 .box-part {
   width: 100%;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -2330,6 +2350,8 @@ select {
   position: absolute;
   top: 0;
   left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
   height: 100%;
   pointer-events: none;
@@ -2340,12 +2362,21 @@ select {
 .boarder-svg-img {
   width: 100%;
   height: 100%;
+  min-width: 100%;
+  min-height: 100%;
   object-fit: fill;
   display: block;
 }
 
 .box-part.up-part {
+  width: 1920px;
+  min-width: 1920px;
+  max-width: 1920px;
+  flex-shrink: 0;
   position: relative;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
 }
 
 .box-part.up-part .text-content-scroll {
@@ -2425,6 +2456,7 @@ select {
 
 /* 呈现区字符方块 (Black Square Mask) */
 .char-block {
+  font-family: 'Noto Serif', 'Noto Sans SC', serif, sans-serif;
   display: inline-block;
   width: 1.25em;
   height: 1.25em;
@@ -2433,7 +2465,6 @@ select {
   vertical-align: middle;
   cursor: pointer;
   border-radius: 2px;
-  transition: transform 0.15s, box-shadow 0.15s;
   position: relative;
   font-weight: 700;
   box-sizing: border-box;
@@ -2452,16 +2483,18 @@ select {
 .char-block.revealed {
   background-color: transparent;
   color: #1e1e1e;
-  animation: flipReveal 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: none;
+  transform: none;
+  transition: none;
 }
 
 .char-block.revealed:hover {
-  transform: scale(1.1);
   opacity: 0.8;
 }
 
 /* 上帝视角参考区字符 (God Char Block) */
 .god-char-block {
+  font-family: 'Noto Serif', 'Noto Sans SC', serif, sans-serif;
   display: inline-block;
   width: 1.25em;
   height: 1.25em;
@@ -2470,7 +2503,6 @@ select {
   vertical-align: middle;
   cursor: pointer;
   border-radius: 3px;
-  transition: all 0.15s ease;
   position: relative;
   box-sizing: border-box;
 }
@@ -2688,17 +2720,6 @@ select {
   color: #1e293b;
 }
 
-/* 翻转揭示动画 */
-@keyframes flipReveal {
-  0% {
-    transform: rotateY(90deg);
-    opacity: 0.3;
-  }
-  100% {
-    transform: rotateY(0deg);
-    opacity: 1;
-  }
-}
 
 /* 浮动提示通知 */
 .notification-toast {
