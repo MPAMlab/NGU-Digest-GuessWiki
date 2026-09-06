@@ -1,30 +1,14 @@
 <template>
-  <div id="app" :class="{ 'is-god-mode': isGodMode }">
-    <div class="app-content">
-      <router-view />
-    </div>
-    <Footer v-if="!isGodMode" />
+  <div id="app">
+    <router-view />
   </div>
 </template>
 
 <script lang="ts">
-import { defineComponent, computed } from 'vue'
-import { useRoute } from 'vue-router'
-import Footer from '@/components/Footer.vue'
+import { defineComponent } from 'vue'
 
 export default defineComponent({
-  name: 'App',
-  components: {
-    Footer
-  },
-  setup() {
-    const route = useRoute()
-    const isGodMode = computed(() => route.name === 'GodMode')
-
-    return {
-      isGodMode
-    }
-  }
+  name: 'App'
 })
 </script>
 
@@ -34,9 +18,10 @@ export default defineComponent({
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   height: 100vh;
+  width: 100vw;
   display: flex;
   flex-direction: column;
-  background-color: #f7f9fc;
+  overflow: hidden;
 }
 
 * {
@@ -47,17 +32,7 @@ export default defineComponent({
 
 html, body {
   height: 100%;
+  width: 100%;
   overflow: hidden;
-}
-
-.app-content {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-
-#app.is-god-mode .app-content {
-  overflow: auto;
 }
 </style>

@@ -54,6 +54,8 @@
     <div v-if="message.show" class="message" :class="message.type" @click="message.show = false">
       {{ message.text }}
     </div>
+
+    <Footer />
   </div>
 </template>
 
@@ -61,9 +63,13 @@
 import { defineComponent, ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { Player } from '@/types/game'
+import Footer from '@/components/Footer.vue'
 
 export default defineComponent({
   name: 'HomeView',
+  components: {
+    Footer
+  },
   setup() {
     const router = useRouter()
     const fileInput = ref<HTMLInputElement | null>(null)
