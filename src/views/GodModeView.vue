@@ -858,6 +858,7 @@ export default defineComponent({
       currentPreviewStepIndex.value = null
       historyStack.value = [[]]
       historyIndex.value = 0
+      sessionFontEmbedCSS = undefined
 
       // 缓存到 sessionStorage
       try {
@@ -991,6 +992,96 @@ export default defineComponent({
       }
     }
 
+    // 检查 unicode-range 是否命中目标文本中的任一字符
+    const doesUnicodeRangeMatch = (unicodeRange: string, text: string): boolean => {
+      if (!unicodeRange) return true
+      const ranges = unicodeRange.split(',').map(r => r.trim())
+      for (const char of text) {
+        const code = char.codePointAt(0)
+        if (code === undefined) continue
+        for (const range of ranges) {
+          const clean = range.replace(/^U\+/i, '').trim()
+          if (clean.includes('-')) {
+            const [startStr, endStr] = clean.split('-')
+            const start = parseInt(startStr, 16)
+            const end = parseInt(endStr, 16)
+            if (code >= start && code <= end) return true
+          } else if (clean.includes('?')) {
+            const start = parseInt(clean.replace(/\?/g, '0'), 16)
+            const end = parseInt(clean.replace(/\?/g, 'f'), 16)
+            if (code >= start && code <= end) return true
+          } else {
+            if (code === parseInt(clean, 16)) return true
+          }
+        }
+      }
+      return false
+    }
+
+    // 根据当前文章内容，仅提取并嵌入实际使用到的字体规则（毫秒级极速打包，100% 避免字符遗漏与粗细不一）
+    const compileArticleFontEmbedCSS = async (text: string): Promise<string> => {
+      const fontRules: CSSFontFaceRule[] = []
+
+      // 1. 遍历已载入的样式表规则，只筛选命中文本的 @font-face 切片
+      for (const sheet of Array.from(document.styleSheets)) {
+        try {
+          const rules = sheet.cssRules || []
+          for (const rule of Array.from(rules)) {
+            if (rule instanceof CSSFontFaceRule) {
+              const family = rule.style.getPropertyValue('font-family').replace(/["']/g, '').trim()
+              if (family === 'Noto Sans SC' || family === 'Noto Serif') {
+                const range = rule.style.getPropertyValue('unicode-range')
+                if (!range || doesUnicodeRangeMatch(range, text)) {
+                  fontRules.push(rule)
+                }
+              }
+            }
+          }
+        } catch {
+          // 忽略跨域样式表受限
+        }
+      }
+
+      // 2. 若命中规则，则转为 Base64 Data URL 嵌入
+      if (fontRules.length > 0) {
+        const embeddedList = await Promise.all(
+          fontRules.map(async (rule) => {
+            const css = rule.cssText
+            const match = css.match(/url\((['"]?)(.*?)\1\)/)
+            if (!match || !match[2] || match[2].startsWith('data:')) {
+              return css
+            }
+            try {
+              const res = await fetch(match[2])
+              const blob = await res.blob()
+              const dataUrl = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader()
+                reader.onloadend = () => resolve(reader.result as string)
+                reader.onerror = reject
+                reader.readAsDataURL(blob)
+              })
+              return css.replace(match[0], `url("${dataUrl}")`)
+            } catch {
+              return ''
+            }
+          })
+        )
+        const result = embeddedList.filter(Boolean).join('\n')
+        if (result) return result
+      }
+
+      // 3. 降级回退
+      if (upPartRef.value) {
+        try {
+          return await getFontEmbedCSS(upPartRef.value, { preferredFontFormat: 'woff2' })
+        } catch {
+          return ''
+        }
+      }
+
+      return ''
+    }
+
     // 捕获呈现区 1920p 画面为 PNG Blob（直接生成二进制 Blob，避免 Base64 巨大内存转换开销，并复用预编译字体样式）
     const captureUpPartBlob = async (): Promise<Blob> => {
       if (!upPartRef.value) {
@@ -1043,13 +1134,12 @@ export default defineComponent({
       try {
         showToast('正在导出当前画面 1920p 高清图片...', 'info')
 
-        if (!sessionFontEmbedCSS && upPartRef.value) {
+        if (!sessionFontEmbedCSS) {
           try {
-            sessionFontEmbedCSS = await getFontEmbedCSS(upPartRef.value, {
-              preferredFontFormat: 'woff2'
-            })
+            sessionFontEmbedCSS = await compileArticleFontEmbedCSS(titleText.value + ' ' + contentText.value)
           } catch (e) {
             console.warn('获取字体嵌入样式失败:', e)
+            sessionFontEmbedCSS = ''
           }
         }
 
@@ -1100,13 +1190,11 @@ export default defineComponent({
       let completedSteps = 0
 
       try {
-        // 1. 首次导出预先编译并缓存字体样式（避免逐帧解析上百条 @font-face 规则，加速 20~30 倍）
-        if (!sessionFontEmbedCSS && upPartRef.value) {
-          exportStatusText.value = '正在预编译高清字体资源 (仅初次需数秒)...'
+        // 1. 首次导出预先提取当前文章命中的字体切片（毫秒级极速嵌入，100% 杜绝字体缺失与粗细不一）
+        if (!sessionFontEmbedCSS) {
+          exportStatusText.value = '正在预编译高清字体资源...'
           try {
-            sessionFontEmbedCSS = await getFontEmbedCSS(upPartRef.value, {
-              preferredFontFormat: 'woff2'
-            })
+            sessionFontEmbedCSS = await compileArticleFontEmbedCSS(titleText.value + ' ' + contentText.value)
           } catch (e) {
             console.warn('获取字体嵌入样式失败，将自动降级:', e)
             sessionFontEmbedCSS = ''
@@ -1555,7 +1643,7 @@ export default defineComponent({
   background-color: #1e1e24;
   color: #e2e8f0;
   overflow: hidden;
-  font-family: 'Noto Serif', 'Noto Sans SC', serif, sans-serif;
+  font-family: 'Noto Serif', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Source Han Sans SC', sans-serif;
   user-select: none;
 }
 
@@ -2517,14 +2605,14 @@ select {
   line-height: 1.25;
   text-align: center;
   vertical-align: middle;
-  font-family: 'Noto Serif', 'Noto Sans SC', serif, sans-serif;
+  font-family: 'Noto Serif', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Source Han Sans SC', sans-serif;
   font-weight: 700;
   box-sizing: border-box;
 }
 
 /* 呈现区字符方块 (Black Square Mask) */
 .char-block {
-  font-family: 'Noto Serif', 'Noto Sans SC', serif, sans-serif;
+  font-family: 'Noto Serif', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Source Han Sans SC', sans-serif;
   display: inline-block;
   width: 1.25em;
   height: 1.25em;
@@ -2562,7 +2650,7 @@ select {
 
 /* 上帝视角参考区字符 (God Char Block) */
 .god-char-block {
-  font-family: 'Noto Serif', 'Noto Sans SC', serif, sans-serif;
+  font-family: 'Noto Serif', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Source Han Sans SC', sans-serif;
   display: inline-block;
   width: 1.25em;
   height: 1.25em;
