@@ -380,9 +380,9 @@
                     <span
                       v-else-if="charInfo.isSymbol"
                       class="char-symbol"
-                      :class="{ 'is-slash': isSlashChar(charInfo.char) }"
+                      :class="{ 'is-slash': isSlashChar(charInfo.char), 'is-space': isSpaceChar(charInfo.char) }"
                       :style="charMarginStyle"
-                    >{{ charInfo.char === ' ' ? '&nbsp;' : charInfo.char }}</span>
+                    >{{ isSpaceChar(charInfo.char) ? '\u00A0' : charInfo.char }}</span>
                     <span
                       v-else
                       class="char-block"
@@ -408,9 +408,9 @@
                     <span
                       v-else-if="charInfo.isSymbol"
                       class="char-symbol"
-                      :class="{ 'is-slash': isSlashChar(charInfo.char) }"
+                      :class="{ 'is-slash': isSlashChar(charInfo.char), 'is-space': isSpaceChar(charInfo.char) }"
                       :style="charMarginStyle"
-                    >{{ charInfo.char === ' ' ? '&nbsp;' : charInfo.char }}</span>
+                    >{{ isSpaceChar(charInfo.char) ? '\u00A0' : charInfo.char }}</span>
                     <span
                       v-else
                       class="char-block"
@@ -457,9 +457,9 @@
                     <span
                       v-else-if="charInfo.isSymbol"
                       class="char-symbol"
-                      :class="{ 'is-slash': isSlashChar(charInfo.char) }"
+                      :class="{ 'is-slash': isSlashChar(charInfo.char), 'is-space': isSpaceChar(charInfo.char) }"
                       :style="charMarginStyle"
-                    >{{ charInfo.char === ' ' ? '&nbsp;' : charInfo.char }}</span>
+                    >{{ isSpaceChar(charInfo.char) ? '\u00A0' : charInfo.char }}</span>
                     <span
                       v-else
                       class="god-char-block"
@@ -485,9 +485,9 @@
                     <span
                       v-else-if="charInfo.isSymbol"
                       class="char-symbol"
-                      :class="{ 'is-slash': isSlashChar(charInfo.char) }"
+                      :class="{ 'is-slash': isSlashChar(charInfo.char), 'is-space': isSpaceChar(charInfo.char) }"
                       :style="charMarginStyle"
-                    >{{ charInfo.char === ' ' ? '&nbsp;' : charInfo.char }}</span>
+                    >{{ isSpaceChar(charInfo.char) ? '\u00A0' : charInfo.char }}</span>
                     <span
                       v-else
                       class="god-char-block"
@@ -752,6 +752,11 @@ export default defineComponent({
     // 判断是否为斜杠字符（呈现为全宽方格样式）
     const isSlashChar = (char: string): boolean => {
       return char === '/' || char === '／' || char === '\\'
+    }
+
+    // 判断是否为空格字符（呈现为全宽方格占位，作为符号默认直接显示）
+    const isSpaceChar = (char: string): boolean => {
+      return char === ' ' || char === '\u3000' || char === '\t' || char === '\u00A0'
     }
 
     // 判断字符是否已揭示
@@ -1589,6 +1594,7 @@ export default defineComponent({
       uniqueRevealedCount,
       isCharRevealed,
       isSlashChar,
+      isSpaceChar,
       isMatchHover,
       setHoveredChar,
       clearHoveredChar,
@@ -2607,6 +2613,19 @@ select {
   vertical-align: middle;
   font-family: 'Noto Serif', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Source Han Sans SC', sans-serif;
   font-weight: 700;
+  box-sizing: border-box;
+}
+
+/* 空格全宽方格占位 (与字块方格 1.25em 保持完全相同尺寸与对齐，作为符号默认直接显示) */
+.char-symbol.is-space {
+  display: inline-block;
+  width: 1.25em;
+  min-width: 1.25em;
+  max-width: 1.25em;
+  height: 1.25em;
+  line-height: 1.25;
+  text-align: center;
+  vertical-align: middle;
   box-sizing: border-box;
 }
 
