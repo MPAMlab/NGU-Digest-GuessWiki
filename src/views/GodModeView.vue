@@ -926,11 +926,13 @@ export default defineComponent({
       showToast(`已移除第 ${idx + 1} 步【${removed?.char}】`)
     }
 
-    // 清空序列
+    // 清空序列（重置已翻开黑块回到初始全遮罩状态）
     const clearSequence = () => {
       clickSequence.value = []
       currentPreviewStepIndex.value = null
-      showToast('已清空点开顺序序列')
+      revealedCharSet.value.clear()
+      saveStateToHistory()
+      showToast('已清空序列并恢复为初始未翻开状态')
     }
 
     // 预览某一步骤状态
