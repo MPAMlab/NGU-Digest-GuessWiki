@@ -36,3 +36,13 @@ export interface GameState {
   // 回合状态
   hasExtraTurn: boolean
 }
+
+export interface TextUnit {
+  text: string
+  key: string
+  index: number
+  isWord: boolean
+  isChinese: boolean
+  isSymbol: boolean
+  isNewline: boolean
+}

@@ -4,8 +4,8 @@
     <header class="top-bar">
       <div class="bar-left">
         <div class="title-group">
-          <span class="logo-tag">POST-PROD</span>
-          <h1>百科猜字 · 视频后制上帝模式</h1>
+          <span class="logo-tag">EP2</span>
+          <h1>百科猜字 · 视频后制上帝模式 (EP2)</h1>
         </div>
 
         <div class="upload-controls">
@@ -31,19 +31,19 @@
       <div class="bar-center">
         <!-- 统计与进度 -->
         <div class="stats-pill">
-          <span>已揭示: <strong>{{ revealedNonSymbolCount }}</strong> / {{ totalNonSymbolCount }}</span>
-          <span class="stats-percent">({{ revealProgress }}%)</span>
+          <span>已高亮: <strong>{{ highlightedNonSymbolCount }}</strong> / {{ totalNonSymbolCount }}</span>
+          <span class="stats-percent">({{ highlightProgress }}%)</span>
           <span class="stats-divider">|</span>
-          <span>独立字符: <strong>{{ uniqueRevealedCount }}</strong> / {{ uniqueCharCount }}</span>
+          <span>独立单元: <strong>{{ uniqueHighlightedCount }}</strong> / {{ uniqueUnitCount }}</span>
         </div>
 
         <!-- 批量操作 -->
         <div class="action-buttons">
-          <button class="btn btn-sm btn-action" @click="revealAll" title="一键揭示所有文字">
-            👁️ 全部揭示
+          <button class="btn btn-sm btn-action" @click="highlightAll" title="一键高亮正文所有内容">
+            ✨ 全部高亮
           </button>
-          <button class="btn btn-sm btn-action" @click="hideAll" title="全部重置为黑块">
-            🔒 全部隐藏
+          <button class="btn btn-sm btn-action" @click="hideAll" title="全部取消高亮">
+            🔒 全部取消
           </button>
           <button class="btn btn-sm btn-action" :disabled="historyIndex <= 0" @click="undo" title="撤销操作 (Ctrl+Z)">
             ↩️ 撤销
@@ -62,9 +62,9 @@
             class="btn btn-xs"
             :class="{ active: boxHeight === 350 && !isAutoHeight }"
             @click="setBoxHeight(350)"
-            title="默认高度 (1920x350)"
+            title="横幅高度 (1920x350)"
           >
-            350p默认
+            350p横幅
           </button>
           <button
             class="btn btn-xs"
@@ -92,7 +92,7 @@
           </button>
           <button
             class="btn btn-xs"
-            :class="{ active: boxHeight === 1080 }"
+            :class="{ active: boxHeight === 1080 && !isAutoHeight }"
             @click="setBoxHeight(1080)"
             title="1080p视频全屏高 (1920x1080)"
           >
@@ -212,6 +212,30 @@
         <span class="unit">px</span>
       </div>
 
+      <!-- 分栏配置 -->
+      <div class="sub-item">
+        <label>分栏列数:</label>
+        <select v-model.number="columnCount" class="num-input">
+          <option :value="1">单栏 (1列)</option>
+          <option :value="2">双栏 (2列)</option>
+          <option :value="3">三栏 (3列)</option>
+          <option :value="4">四栏 (4列)</option>
+        </select>
+      </div>
+
+      <div class="sub-item" v-if="columnCount > 1">
+        <label>栏间距:</label>
+        <input
+          type="number"
+          class="num-input"
+          min="10"
+          max="200"
+          step="10"
+          v-model.number="columnGap"
+        />
+        <span class="unit">px</span>
+      </div>
+
       <div class="sub-item">
         <label>垂直居中:</label>
         <button
@@ -243,14 +267,149 @@
           :class="{ active: clickMode === 'toggle' }"
           @click="clickMode = clickMode === 'toggle' ? 'reveal' : 'toggle'"
         >
-          {{ clickMode === 'toggle' ? '🔄 点击切换(揭示/隐藏)' : '👁️ 仅点击揭示' }}
+          {{ clickMode === 'toggle' ? '🔄 点击切换(高亮/取消)' : '✨ 仅点击高亮' }}
+        </button>
+      </div>
+
+      <div class="sub-item">
+        <button
+          class="btn btn-xs toggle-action-btn"
+          :class="{ active: showSidebar }"
+          @click="toggleSidebar"
+          title="切换显示右侧已高亮词汇/字符侧边栏"
+        >
+          {{ showSidebar ? '📋 侧边栏: 显示' : '📋 侧边栏: 隐藏' }}
+        </button>
+      </div>
+
+      <div class="sub-item">
+        <button
+          class="btn btn-xs toggle-action-btn"
+          :class="{ active: showTopTurnBar }"
+          @click="showTopTurnBar = !showTopTurnBar"
+          title="切换是否在顶部显示独立回合与玩家横栏"
+        >
+          {{ showTopTurnBar ? '🎮 顶栏: 显示' : '🎮 顶栏: 隐藏' }}
         </button>
       </div>
 
       <div class="sub-item sub-item-right">
         <span class="dim-hint">
-          💡 提示：在【呈现区黑方块】或【参考区明文】上点击任意字符，均可同步揭示/隐藏全部相同字符。
+          💡 提示：点击正文中的任意单词或汉字，均可同步高亮/取消全部相同词汇/字符。标题始终正常展示。
         </span>
+      </div>
+    </div>
+
+    <!-- 玩家与回合制控制台 (Player & Turn-Based Bar) -->
+    <div v-if="showTopTurnBar" class="turn-player-bar">
+      <!-- 玩家管理区域 (1~6人，各分配独占色彩) -->
+      <div class="turn-bar-left">
+        <div class="player-count-ctrl">
+          <span class="ctrl-label">👥 玩家 ({{ players.length }}/6):</span>
+          <div class="btn-group-tight">
+            <button
+              class="btn btn-xs count-btn"
+              :disabled="players.length <= 1"
+              @click="removePlayer"
+              title="减少 1 位玩家 (最低 1 人)"
+            >
+              −
+            </button>
+            <button
+              class="btn btn-xs count-btn"
+              :disabled="players.length >= 6"
+              @click="addPlayer"
+              title="增加 1 位玩家 (最高 6 人)"
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        <div class="players-chips-container">
+          <div
+            v-for="(p, idx) in players"
+            :key="p.id"
+            class="player-chip"
+            :class="{
+              'is-current-turn': idx === currentPlayerIndex,
+              'is-inactive': idx !== currentPlayerIndex
+            }"
+            @click="setCurrentPlayerIndex(idx)"
+            :title="`【${p.name}】已高亮 ${getPlayerHighlightCount(p.id)} 个词/字 (双击可修改名称)`"
+            @dblclick="renamePlayer(p)"
+          >
+            <span class="player-color-dot" :style="{ backgroundColor: p.color }"></span>
+            <span class="player-name-text">{{ p.name }}</span>
+            <span class="player-score-badge" :style="{ backgroundColor: p.color + '26', color: p.color }">
+              {{ getPlayerHighlightCount(p.id) }}
+            </span>
+            <span v-if="idx === currentPlayerIndex" class="current-turn-badge-tag">行动中</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 回合进度与操作区域 (1~3个词) -->
+      <div class="turn-bar-right">
+        <div class="round-indicator">
+          <span class="round-num">第 <strong>{{ currentRound }}</strong> 轮</span>
+        </div>
+
+        <div
+          class="turn-status-card"
+          :style="{ borderColor: currentPlayer.color, backgroundColor: currentPlayer.color + '15' }"
+        >
+          <span class="active-player-name" :style="{ color: currentPlayer.color }">
+            ● {{ currentPlayer.name }}
+          </span>
+          <div class="quota-meter">
+            <span class="quota-meter-label">本轮选择:</span>
+            <div class="quota-steps">
+              <span class="quota-pill" :class="{ filled: currentTurnPickedKeys.length >= 1 }">1</span>
+              <span class="quota-pill" :class="{ filled: currentTurnPickedKeys.length >= 2 }">2</span>
+              <span class="quota-pill" :class="{ filled: currentTurnPickedKeys.length >= 3 }">3</span>
+            </div>
+            <span class="quota-fraction">
+              <strong>{{ currentTurnPickedKeys.length }}</strong> / 3
+              <span v-if="currentTurnPickedKeys.length === 0" class="quota-tip-dim">(需选1~3个)</span>
+              <span v-else-if="currentTurnPickedKeys.length === 3" class="quota-tip-success">(已满3个)</span>
+              <span v-else class="quota-tip-ok">(可结束或继续)</span>
+            </span>
+          </div>
+        </div>
+
+        <button
+          class="btn btn-sm btn-turn-action"
+          :class="{
+            'btn-ready': currentTurnPickedKeys.length >= 1 && currentTurnPickedKeys.length < 3,
+            'btn-full': currentTurnPickedKeys.length === 3
+          }"
+          :disabled="currentTurnPickedKeys.length < 1"
+          @click="endCurrentTurn"
+          :title="currentTurnPickedKeys.length < 1 ? '请在正文至少高亮 1 个词/字才能结束回合 (快捷键: Enter)' : '完成本回合，进入下一位玩家 (快捷键: Enter)'"
+        >
+          <span v-if="currentTurnPickedKeys.length === 3">🎉 已选满 3 个 · 结束回合 ⏭️</span>
+          <span v-else-if="currentTurnPickedKeys.length >= 1">⏭️ 结束本回合 ({{ currentTurnPickedKeys.length }}/3)</span>
+          <span v-else>🔒 需选至少 1 个词</span>
+        </button>
+
+        <button
+          v-if="currentTurnPickedKeys.length > 0"
+          class="btn btn-xs btn-outline-danger"
+          @click="cancelCurrentTurnPicks"
+          title="撤回当前回合刚刚高亮的全部词汇"
+        >
+          ↺ 撤回本轮
+        </button>
+
+        <button
+          class="btn btn-xs mode-toggle-btn"
+          :class="{ active: turnBasedMode }"
+          @click="turnBasedMode = !turnBasedMode"
+          :title="turnBasedMode ? '当前为回合制限制模式 (每人每轮 1~3 个)，点击可切换为自由模式' : '当前为自由点击模式，点击开启回合制限制'"
+        >
+          {{ turnBasedMode ? '🎮 回合制: 开启' : '🔓 自由模式' }}
+        </button>
       </div>
     </div>
 
@@ -258,7 +417,7 @@
     <div class="sequence-toolbar">
       <div class="seq-left">
         <span class="seq-title">
-          🎬 点开顺序序列 <span class="seq-badge">{{ clickSequence.length }} 步</span>
+          🎬 高亮顺序序列 <span class="seq-badge">{{ clickSequence.length }} 步</span>
         </span>
         <button
           class="btn btn-xs seq-record-btn"
@@ -274,7 +433,7 @@
       <!-- 步骤序列水平滚动标签 -->
       <div class="seq-scroll-container">
         <div v-if="clickSequence.length === 0" class="seq-empty-tip">
-          👆 点击黑方块或参考区明文，将按点击顺序自动记录步骤序列，可一键批量导出 1920p 图片
+          👆 点击正文中的单词或汉字，将按点击顺序自动记录高亮序列，可一键批量导出 1920p 图片
         </div>
         <div
           v-for="(step, idx) in clickSequence"
@@ -282,12 +441,18 @@
           class="seq-step-item"
           :class="{ active: currentPreviewStepIndex === idx }"
           @click="previewStep(idx)"
-          @mouseenter="setHoveredChar(step.char)"
-          @mouseleave="clearHoveredChar"
-          :title="`第 ${step.order} 步：点开【${step.char}】(出现 ${step.count} 次) - 点击可预览此画面`"
+          @mouseenter="setHoveredKey(step.key)"
+          @mouseleave="clearHoveredKey"
+          :title="`第 ${step.order} 步：【${step.playerName || '玩家'}】高亮【${step.text}】(出现 ${step.count} 次) - 点击可预览此画面`"
         >
           <span class="step-num">{{ String(step.order).padStart(2, '0') }}</span>
-          <span class="step-char">{{ step.char }}</span>
+          <span
+            v-if="step.playerName"
+            class="step-player-tag"
+            :style="{ backgroundColor: step.playerColor || '#0284c7' }"
+            :title="`玩家：${step.playerName}`"
+          >{{ step.playerName.split(' ')[0] }}</span>
+          <span class="step-char">{{ step.text }}</span>
           <span class="step-count">x{{ step.count }}</span>
           <span class="step-delete" @click.stop="removeStep(idx)" title="移除此步">×</span>
         </div>
@@ -314,7 +479,7 @@
           class="btn btn-xs export-current-btn"
           :disabled="isExporting"
           @click="exportCurrentFrame"
-          title="不开启/不依赖顺序序列，直接将呈现区当前画面导出为一张 1920p 图片"
+          title="不开启/不依赖顺序序列，直接将展示区当前画面导出为一张 1920p 图片"
         >
           📷 导出当前画面
         </button>
@@ -322,195 +487,392 @@
           class="btn btn-xs btn-primary export-btn"
           :disabled="clickSequence.length === 0 || isExporting"
           @click="openExportModal"
-          title="将当前点开顺序逐帧导出为 1920p 图片组"
+          title="将当前高亮顺序逐帧导出为 1920p 图片组"
         >
           📸 批量导出图片 ({{ clickSequence.length }} 张)
         </button>
       </div>
     </div>
 
-    <!-- 主舞台滚动容器（支持适应窗口与1:1滚动） -->
-    <main
-      ref="stageWrapperRef"
-      class="stage-viewport"
-      @dragover.prevent="isDragOver = true"
-      @dragleave.prevent="isDragOver = false"
-      @drop.prevent="handleDrop"
-    >
-      <!-- 拖拽提示层 -->
-      <div v-if="isDragOver" class="drag-drop-overlay">
-        <div class="drag-drop-box">
-          <span class="drag-icon">📥</span>
-          <p>松开鼠标以上传 TXT 文件</p>
-        </div>
-      </div>
-
-      <!-- 舞台内容区（根据缩放值调整外层尺寸与缩放） -->
-      <div
-        class="stage-scaler-container"
-        :style="scalerContainerStyle"
+    <!-- 工作区主体（舞台视口 + 高亮侧边栏） -->
+    <div class="workspace-layout">
+      <!-- 主舞台滚动容器（支持适应窗口与1:1滚动） -->
+      <main
+        ref="stageWrapperRef"
+        class="stage-viewport"
+        @dragover.prevent="isDragOver = true"
+        @dragleave.prevent="isDragOver = false"
+        @drop.prevent="handleDrop"
       >
-        <div class="stage-scaler-inner" :style="scalerInnerStyle">
-          <!-- 1. 呈现区指示条 (位于 1080p 屏幕外，绝不挤占视窗内部空间) -->
-          <div v-if="!hideIndicators" class="screen-outer-indicator-bar">
-            <div class="outer-pill tag-game">
-              <span class="pill-badge">📺 视频呈现区 (Game View)</span>
-              <span class="pill-info">宽: 1920px | 高: {{ isAutoHeight ? '自适应' : `${boxHeight}px` }} | 边框: {{ showBoarder ? '开启' : '关闭' }}</span>
-            </div>
+        <!-- 拖拽提示层 -->
+        <div v-if="isDragOver" class="drag-drop-overlay">
+          <div class="drag-drop-box">
+            <span class="drag-icon">📥</span>
+            <p>松开鼠标以上传 TXT 文件</p>
           </div>
+        </div>
 
-          <!-- Box 1：呈现区（黑方块遮罩模式，模拟视频画面，独立 1920px 视窗） -->
-          <div
-            ref="upPartRef"
-            class="screen-box-1080p up-part"
-            :class="{ 'has-boarder': showBoarder }"
-            :style="singleBoxStyle"
-          >
-            <!-- 题目边框装饰图层 (Question Boarder SVG) -->
-            <div v-if="showBoarder" class="question-boarder-layer">
-              <img :src="boarderDataUrl" class="boarder-svg-img" alt="Question Border Frame" />
-            </div>
-
-            <div class="text-content-scroll" :class="{ 'with-boarder': showBoarder }" :style="textScrollStyle">
-              <div class="text-inner-container" :class="{ 'is-v-centered': isVerticalCenter }">
-                <!-- 文章标题 -->
-                <h2 class="article-title-block" :style="titleStyle">
-                  <template v-for="(charInfo, idx) in titleChars" :key="`up-title-${idx}`">
-                    <br v-if="charInfo.char === '\n'" />
-                    <span
-                      v-else-if="charInfo.isSymbol"
-                      class="char-symbol"
-                      :class="{ 'is-slash': isSlashChar(charInfo.char), 'is-space': isSpaceChar(charInfo.char) }"
-                      :style="charMarginStyle"
-                    >{{ isSpaceChar(charInfo.char) ? '\u00A0' : charInfo.char }}</span>
-                    <span
-                      v-else
-                      class="char-block"
-                      :class="{
-                        hidden: !isCharRevealed(charInfo.char),
-                        revealed: isCharRevealed(charInfo.char),
-                        'is-hover-match': isMatchHover(charInfo.char)
-                      }"
-                      :style="charMarginStyle"
-                      @click="handleCharClick(charInfo.char)"
-                      @mouseenter="setHoveredChar(charInfo.char)"
-                      @mouseleave="clearHoveredChar"
-                    >
-                      {{ isCharRevealed(charInfo.char) ? charInfo.char : '' }}
-                    </span>
-                  </template>
-                </h2>
-
-                <!-- 文章正文 -->
-                <div class="article-body-block" :style="bodyStyle">
-                  <template v-for="(charInfo, idx) in contentChars" :key="`up-content-${idx}`">
-                    <br v-if="charInfo.char === '\n'" />
-                    <span
-                      v-else-if="charInfo.isSymbol"
-                      class="char-symbol"
-                      :class="{ 'is-slash': isSlashChar(charInfo.char), 'is-space': isSpaceChar(charInfo.char) }"
-                      :style="charMarginStyle"
-                    >{{ isSpaceChar(charInfo.char) ? '\u00A0' : charInfo.char }}</span>
-                    <span
-                      v-else
-                      class="char-block"
-                      :class="{
-                        hidden: !isCharRevealed(charInfo.char),
-                        revealed: isCharRevealed(charInfo.char),
-                        'is-hover-match': isMatchHover(charInfo.char)
-                      }"
-                      :style="charMarginStyle"
-                      @click="handleCharClick(charInfo.char)"
-                      @mouseenter="setHoveredChar(charInfo.char)"
-                      @mouseleave="clearHoveredChar"
-                    >
-                      {{ isCharRevealed(charInfo.char) ? charInfo.char : '' }}
-                    </span>
-                  </template>
-                </div>
+        <!-- 舞台内容区（根据缩放值调整外层尺寸与缩放） -->
+        <div
+          class="stage-scaler-container"
+          :style="scalerContainerStyle"
+        >
+          <div class="stage-scaler-inner" :style="scalerInnerStyle">
+            <!-- 区域指示条 (位于 1080p 屏幕外，绝不挤占视窗内部空间) -->
+            <div v-if="!hideIndicators" class="screen-outer-indicator-bar">
+              <div class="outer-pill tag-god">
+                <span class="pill-badge">👑 百科展示区 (God View)</span>
+                <span class="pill-info">宽: 1920px | 高: {{ isAutoHeight ? '自适应' : `${boxHeight}px` }} | 边框: {{ showBoarder ? '开启' : '关闭' }} | 分栏: {{ columnCount > 1 ? `${columnCount}栏` : '单栏' }} | 点击正文单词或汉字高亮</span>
               </div>
             </div>
-          </div>
 
-          <!-- 两个 Box 之间留空 -->
-          <div class="boxes-gap-spacer"></div>
+            <!-- 单一视窗：上帝模式展示区 (含边框、正文词汇/汉字高亮) -->
+            <div
+              ref="screenBoxRef"
+              class="screen-box-1080p god-view-box"
+              :class="{ 'has-boarder': showBoarder }"
+              :style="singleBoxStyle"
+            >
+              <!-- 题目边框装饰图层 (Question Boarder SVG) -->
+              <div v-if="showBoarder" class="question-boarder-layer">
+                <img :src="boarderDataUrl" class="boarder-svg-img" alt="Question Border Frame" />
+              </div>
 
-          <!-- 2. 参考区指示条 -->
-          <div v-if="!hideIndicators" class="screen-outer-indicator-bar">
-            <div class="outer-pill tag-god">
-              <span class="pill-badge">👑 上帝视角参考区 (God View)</span>
-              <span class="pill-info">宽: 1920px | 高: {{ isAutoHeight ? '自适应' : `${boxHeight}px` }} | 点击任意明文揭示/隐藏</span>
-            </div>
-          </div>
+              <div class="text-content-scroll" :class="{ 'with-boarder': showBoarder }" :style="textScrollStyle">
+                <div class="text-inner-container" :class="{ 'is-v-centered': isVerticalCenter }">
+                  <!-- 文章标题：正常展示，不参与高亮与选择 -->
+                  <h2 class="article-title-block" :style="titleStyle">
+                    {{ titleText }}
+                  </h2>
 
-          <!-- Box 2：参考区（上帝视角无遮罩明文，独立 1920px 视窗，与呈现区共享高度） -->
-          <div
-            class="screen-box-1080p down-part"
-            :style="singleBoxStyle"
-          >
-            <div class="text-content-scroll" :style="textScrollStyle">
-              <div class="text-inner-container" :class="{ 'is-v-centered': isVerticalCenter }">
-                <!-- 文章标题 -->
-                <h2 class="article-title-block" :style="titleStyle">
-                  <template v-for="(charInfo, idx) in titleChars" :key="`down-title-${idx}`">
-                    <br v-if="charInfo.char === '\n'" />
-                    <span
-                      v-else-if="charInfo.isSymbol"
-                      class="char-symbol"
-                      :class="{ 'is-slash': isSlashChar(charInfo.char), 'is-space': isSpaceChar(charInfo.char) }"
-                      :style="charMarginStyle"
-                    >{{ isSpaceChar(charInfo.char) ? '\u00A0' : charInfo.char }}</span>
-                    <span
-                      v-else
-                      class="god-char-block"
-                      :class="{
-                        'is-revealed': isCharRevealed(charInfo.char),
-                        'is-hidden': !isCharRevealed(charInfo.char),
-                        'is-hover-match': isMatchHover(charInfo.char)
-                      }"
-                      :style="charMarginStyle"
-                      @click="handleCharClick(charInfo.char)"
-                      @mouseenter="setHoveredChar(charInfo.char)"
-                      @mouseleave="clearHoveredChar"
-                    >
-                      {{ charInfo.char }}
-                    </span>
-                  </template>
-                </h2>
-
-                <!-- 文章正文 -->
-                <div class="article-body-block" :style="bodyStyle">
-                  <template v-for="(charInfo, idx) in contentChars" :key="`down-content-${idx}`">
-                    <br v-if="charInfo.char === '\n'" />
-                    <span
-                      v-else-if="charInfo.isSymbol"
-                      class="char-symbol"
-                      :class="{ 'is-slash': isSlashChar(charInfo.char), 'is-space': isSpaceChar(charInfo.char) }"
-                      :style="charMarginStyle"
-                    >{{ isSpaceChar(charInfo.char) ? '\u00A0' : charInfo.char }}</span>
-                    <span
-                      v-else
-                      class="god-char-block"
-                      :class="{
-                        'is-revealed': isCharRevealed(charInfo.char),
-                        'is-hidden': !isCharRevealed(charInfo.char),
-                        'is-hover-match': isMatchHover(charInfo.char)
-                      }"
-                      :style="charMarginStyle"
-                      @click="handleCharClick(charInfo.char)"
-                      @mouseenter="setHoveredChar(charInfo.char)"
-                      @mouseleave="clearHoveredChar"
-                    >
-                      {{ charInfo.char }}
-                    </span>
-                  </template>
+                  <!-- 文章正文：单词 / 汉字单元化高亮 (支持多栏排版) -->
+                  <div class="article-body-block" :style="bodyStyle">
+                    <template v-for="(unit, idx) in paragraphUnits" :key="`unit-${idx}`">
+                      <br v-if="unit.isNewline" />
+                      <span
+                        v-else-if="unit.isSymbol"
+                        class="char-symbol"
+                        :class="{ 'is-slash': isSlashChar(unit.text), 'is-space': isSpaceChar(unit.text) }"
+                        :style="charMarginStyle"
+                      >{{ isSpaceChar(unit.text) ? '\u00A0' : unit.text }}</span>
+                      <span
+                        v-else
+                        class="god-char-block"
+                        :class="{
+                          'is-highlighted': isUnitHighlighted(unit.key),
+                          'is-unselected': !isUnitHighlighted(unit.key),
+                          'is-revealed': isUnitHighlighted(unit.key),
+                          'is-hidden': !isUnitHighlighted(unit.key),
+                          'is-hover-match': isMatchHover(unit.key),
+                          'is-word': unit.isWord
+                        }"
+                        :style="[charMarginStyle, getUnitPlayerStyle(unit.key)]"
+                        @click="handleUnitClick(unit.key, unit.text)"
+                        @mouseenter="setHoveredKey(unit.key)"
+                        @mouseleave="clearHoveredKey"
+                      >
+                        {{ unit.text }}
+                      </span>
+                    </template>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </main>
+      </main>
+
+      <!-- 侧边栏：已高亮词汇与汉字面板 (独立于展示区外，不影响导出画质与结构) -->
+      <aside v-if="showSidebar" class="highlight-sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-title">
+            <span class="sidebar-icon">📌</span>
+            <h3>高亮词汇/字符</h3>
+            <span class="sidebar-badge">{{ highlightedList.length }} / {{ allUniqueUnits.length }}</span>
+          </div>
+          <button class="sidebar-close-btn" @click="showSidebar = false" title="关闭侧边栏">✕</button>
+        </div>
+
+        <!-- 侧边栏内的玩家与回合控制面板 (Sidebar Player & Turn Panel) -->
+        <div class="sidebar-turn-section">
+          <div class="sidebar-turn-header" @click="isSidebarTurnSectionCollapsed = !isSidebarTurnSectionCollapsed">
+            <div class="sidebar-turn-header-title">
+              <span>🎮 回合与玩家</span>
+              <span class="sidebar-mini-pill" :style="{ backgroundColor: currentPlayer.color }">
+                ● {{ currentPlayer.name }} (第{{ currentRound }}轮)
+              </span>
+            </div>
+            <button class="mini-collapse-btn" :title="isSidebarTurnSectionCollapsed ? '展开回合控制面板' : '折叠回合控制面板'">
+              {{ isSidebarTurnSectionCollapsed ? '展开 ▸' : '收起 ▾' }}
+            </button>
+          </div>
+
+          <div v-show="!isSidebarTurnSectionCollapsed" class="sidebar-turn-body">
+            <!-- 顶部回合状态卡片 -->
+            <div
+              class="sidebar-turn-card"
+              :style="{
+                borderColor: currentPlayer.color,
+                background: `linear-gradient(135deg, ${currentPlayer.color}15, rgba(24, 26, 36, 0.95))`
+              }"
+            >
+              <div class="sidebar-turn-card-top">
+                <span class="sidebar-round-tag">第 <strong>{{ currentRound }}</strong> 轮</span>
+                <div class="sidebar-turn-right-actions">
+                  <button
+                    class="btn btn-xs mini-mode-btn"
+                    :class="{ active: turnBasedMode }"
+                    @click="turnBasedMode = !turnBasedMode"
+                    :title="turnBasedMode ? '回合制模式已开启 (每人每轮 1~3 个)' : '自由点击模式'"
+                  >
+                    {{ turnBasedMode ? '🎮 回合制' : '🔓 自由' }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- 当前行动玩家 -->
+              <div class="sidebar-active-player-row">
+                <span class="sidebar-active-avatar" :style="{ backgroundColor: currentPlayer.color }"></span>
+                <div class="sidebar-active-info">
+                  <div class="sidebar-active-name" :style="{ color: currentPlayer.color }">
+                    {{ currentPlayer.name }}
+                  </div>
+                  <div class="sidebar-active-quota-status">
+                    <span class="quota-mini-label">本轮选择:</span>
+                    <div class="sidebar-quota-dots">
+                      <span class="sidebar-quota-dot" :class="{ filled: currentTurnPickedKeys.length >= 1 }">1</span>
+                      <span class="sidebar-quota-dot" :class="{ filled: currentTurnPickedKeys.length >= 2 }">2</span>
+                      <span class="sidebar-quota-dot" :class="{ filled: currentTurnPickedKeys.length >= 3 }">3</span>
+                    </div>
+                    <span class="sidebar-quota-text">
+                      <strong>{{ currentTurnPickedKeys.length }}</strong>/3
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 操作按钮组 -->
+              <div class="sidebar-turn-actions-row">
+                <button
+                  class="btn btn-sm sidebar-end-turn-btn"
+                  :class="{
+                    'btn-ready': currentTurnPickedKeys.length >= 1 && currentTurnPickedKeys.length < 3,
+                    'btn-full': currentTurnPickedKeys.length === 3
+                  }"
+                  :disabled="currentTurnPickedKeys.length < 1"
+                  @click="endCurrentTurn"
+                  :title="currentTurnPickedKeys.length < 1 ? '请在正文至少高亮 1 个词/字才能结束回合 (快捷键: Enter)' : '完成本回合，进入下一位玩家 (快捷键: Enter)'"
+                >
+                  <span v-if="currentTurnPickedKeys.length === 3">🎉 满3个 · 结束回合 ⏭️</span>
+                  <span v-else-if="currentTurnPickedKeys.length >= 1">⏭️ 结束回合 ({{ currentTurnPickedKeys.length }}/3)</span>
+                  <span v-else>🔒 需选 1~3 个词</span>
+                </button>
+                <button
+                  v-if="currentTurnPickedKeys.length > 0"
+                  class="btn btn-xs btn-outline-danger sidebar-cancel-turn-btn"
+                  @click="cancelCurrentTurnPicks"
+                  title="撤回当前回合刚刚高亮的全部词汇"
+                >
+                  ↺ 撤回
+                </button>
+              </div>
+            </div>
+
+            <!-- 玩家列表与管理 (1~6人) -->
+            <div class="sidebar-players-group">
+              <div class="sidebar-players-header">
+                <span class="sidebar-section-subtitle">
+                  👥 参与玩家 ({{ players.length }}/6)
+                </span>
+                <div class="btn-group-tight">
+                  <button
+                    class="btn btn-xs count-btn"
+                    :disabled="players.length <= 1"
+                    @click="removePlayer"
+                    title="减少 1 位玩家 (最低 1 人)"
+                  >
+                    −
+                  </button>
+                  <button
+                    class="btn btn-xs count-btn"
+                    :disabled="players.length >= 6"
+                    @click="addPlayer"
+                    title="增加 1 位玩家 (最高 6 人)"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              <div class="sidebar-players-chips">
+                <div
+                  v-for="(p, idx) in players"
+                  :key="p.id"
+                  class="sidebar-player-chip"
+                  :class="{
+                    'is-current': idx === currentPlayerIndex,
+                    'is-filtered': sidebarPlayerFilter === p.id
+                  }"
+                  @click="setCurrentPlayerIndex(idx)"
+                  :title="`【${p.name}】已高亮 ${getPlayerHighlightCount(p.id)} 个词/字 (单击切换至此玩家，双击改名)`"
+                  @dblclick="renamePlayer(p)"
+                >
+                  <span class="player-color-dot" :style="{ backgroundColor: p.color }"></span>
+                  <span class="sidebar-chip-name">{{ p.name }}</span>
+                  <span
+                    class="sidebar-chip-count"
+                    :style="{ backgroundColor: p.color + '26', color: p.color }"
+                  >
+                    {{ getPlayerHighlightCount(p.id) }}
+                  </span>
+                  <span v-if="idx === currentPlayerIndex" class="sidebar-chip-turn-tag">行</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-tabs">
+          <button
+            class="tab-btn"
+            :class="{ active: sidebarTab === 'highlighted' }"
+            @click="sidebarTab = 'highlighted'"
+          >
+            已高亮 ({{ highlightedList.length }})
+          </button>
+          <button
+            class="tab-btn"
+            :class="{ active: sidebarTab === 'all' }"
+            @click="sidebarTab = 'all'"
+          >
+            全部 ({{ allUniqueUnits.length }})
+          </button>
+        </div>
+
+        <div class="sidebar-filter-bar">
+          <!-- 玩家专属筛选行 -->
+          <div class="sidebar-player-filter-row">
+            <span class="player-filter-label">玩家:</span>
+            <div class="player-filter-chips">
+              <button
+                class="player-filter-btn"
+                :class="{ active: sidebarPlayerFilter === null }"
+                @click="sidebarPlayerFilter = null"
+                title="展示所有玩家的高亮词"
+              >
+                全部
+              </button>
+              <button
+                v-for="p in players"
+                :key="`filter-${p.id}`"
+                class="player-filter-btn"
+                :class="{ active: sidebarPlayerFilter === p.id }"
+                :style="sidebarPlayerFilter === p.id ? { backgroundColor: p.color, borderColor: p.color, color: '#fff' } : { borderColor: p.color + '66' }"
+                @click="sidebarPlayerFilter = sidebarPlayerFilter === p.id ? null : p.id"
+                :title="`仅查看【${p.name}】高亮的内容`"
+              >
+                <span class="filter-dot" :style="{ backgroundColor: p.color }"></span>
+                {{ p.name }}
+              </button>
+            </div>
+          </div>
+
+          <div class="sidebar-search-box">
+            <span class="search-icon">🔍</span>
+            <input
+              v-model="sidebarSearch"
+              type="text"
+              placeholder="搜索词汇或汉字..."
+              class="sidebar-search-input"
+            />
+            <button
+              v-if="sidebarSearch"
+              class="clear-search-btn"
+              @click="sidebarSearch = ''"
+            >✕</button>
+          </div>
+
+          <div class="sidebar-actions-row">
+            <select v-model="sidebarSort" class="sidebar-sort-select" title="列表排序方式">
+              <option value="freq">按频次 (高→低)</option>
+              <option value="order">按全文出场先后</option>
+              <option value="alpha">按字母/拼音</option>
+            </select>
+            <div class="sidebar-quick-btns">
+              <button class="btn btn-xs" @click="highlightAll" title="高亮全部正文内容">全选</button>
+              <button class="btn btn-xs" @click="hideAll" title="清空全部高亮">清空</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-list-container">
+          <div v-if="displayedSidebarUnits.length === 0" class="sidebar-empty">
+            <span class="empty-icon">📭</span>
+            <p v-if="sidebarSearch">未找到与“{{ sidebarSearch }}”匹配的项目</p>
+            <p v-else-if="sidebarTab === 'highlighted'">尚未高亮任何单词或字符<br/>点击画面中的词块即可高亮，或切换至【全部】标签选择</p>
+            <p v-else>正文中没有可用词汇或字符</p>
+          </div>
+
+          <div
+            v-for="item in displayedSidebarUnits"
+            :key="item.key"
+            class="sidebar-item"
+            :class="{
+              'is-highlighted': isUnitHighlighted(item.key),
+              'is-hovered': isMatchHover(item.key)
+            }"
+            @mouseenter="setHoveredKey(item.key)"
+            @mouseleave="clearHoveredKey"
+            @click="handleUnitClick(item.key, item.text)"
+          >
+            <span class="item-type-badge" :class="item.isWord ? 'badge-word' : 'badge-char'">
+              {{ item.isWord ? '词' : '字' }}
+            </span>
+
+            <span class="item-text" :title="item.text">{{ item.text }}</span>
+
+            <!-- 归属玩家标签 -->
+            <span
+              v-if="getUnitOwnerPlayer(item.key)"
+              class="item-player-badge"
+              :style="{
+                backgroundColor: getUnitOwnerPlayer(item.key)?.color + '22',
+                color: getUnitOwnerPlayer(item.key)?.color,
+                borderColor: getUnitOwnerPlayer(item.key)?.color
+              }"
+              :title="`归属：${getUnitOwnerPlayer(item.key)?.name}`"
+            >
+              {{ getUnitOwnerPlayer(item.key)?.name.split(' ')[0] }}
+            </span>
+
+            <span class="item-count" title="全文出现次数">×{{ item.count }}</span>
+
+            <button
+              v-if="isUnitHighlighted(item.key)"
+              class="item-remove-btn"
+              @click.stop="handleUnitClick(item.key, item.text)"
+              title="取消高亮"
+            >
+              ✕
+            </button>
+            <button
+              v-else
+              class="item-add-btn"
+              @click.stop="handleUnitClick(item.key, item.text)"
+              title="点击高亮"
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <span>正文词频覆盖率:</span>
+          <strong class="coverage-percent">{{ highlightProgress }}%</strong>
+          <span class="dim-stat">({{ highlightedNonSymbolCount }} / {{ totalNonSymbolCount }} 次)</span>
+        </div>
+      </aside>
+    </div>
 
     <!-- 简易浮动提示通知 -->
     <transition name="fade">
@@ -523,7 +885,7 @@
     <div v-if="exportModalVisible" class="modal-overlay" @click.self="!isExporting && (exportModalVisible = false)">
       <div class="modal-dialog">
         <div class="modal-header">
-          <h3>📸 批量导出“视频呈现区”1920p图片序列</h3>
+          <h3>📸 批量导出“百科展示区”1920p图片序列</h3>
           <button class="modal-close" :disabled="isExporting" @click="exportModalVisible = false">✕</button>
         </div>
 
@@ -531,7 +893,7 @@
           <div class="export-summary-box">
             <div class="summary-item">
               <span class="label">🎯 导出目标:</span>
-              <span class="val">视频呈现区 (Game View)</span>
+              <span class="val">百科展示区 (God View)</span>
             </div>
             <div class="summary-item">
               <span class="label">📐 输出规格:</span>
@@ -550,11 +912,11 @@
           <div class="export-options">
             <label class="option-check">
               <input type="checkbox" v-model="includeInitialFrame" :disabled="isExporting" />
-              <span>包含第 00 步（全遮罩未点开初始画面：<code>00_{{ titleText || '标题' }}_初始.png</code>）</span>
+              <span>包含第 00 步（全初始未高亮画面：<code>00_{{ titleText || '标题' }}_初始.png</code>）</span>
             </label>
             <label class="option-check">
               <input type="checkbox" v-model="includeFinalFullRevealFrame" :disabled="isExporting" />
-              <span>包含最终步骤（全文章揭示无黑块：<code>{{ String(clickSequence.length + 1).padStart(2, '0') }}_{{ titleText || '标题' }}_全展示.png</code>）</span>
+              <span>包含最终步骤（全正文高亮画面：<code>{{ String(clickSequence.length + 1).padStart(2, '0') }}_{{ titleText || '标题' }}_全高亮.png</code>）</span>
             </label>
 
             <div class="option-group">
@@ -579,14 +941,14 @@
                 </li>
                 <li v-for="(step, idx) in clickSequence.slice(0, 3)" :key="step.id">
                   <span class="badge">{{ String(idx + 1).padStart(2, '0') }}</span>
-                  {{ String(idx + 1).padStart(2, '0') }}_{{ titleText || '标题' }}_{{ step.char }}.png
+                  {{ String(idx + 1).padStart(2, '0') }}_{{ titleText || '标题' }}_{{ step.text }}.png
                 </li>
                 <li v-if="clickSequence.length > 3" class="more-steps">
-                  ... 及中间 {{ clickSequence.length - 3 }} 张点开字符图片
+                  ... 及中间 {{ clickSequence.length - 3 }} 张高亮步骤图片
                 </li>
                 <li v-if="includeFinalFullRevealFrame">
                   <span class="badge">{{ String(clickSequence.length + 1).padStart(2, '0') }}</span>
-                  {{ String(clickSequence.length + 1).padStart(2, '0') }}_{{ titleText || '标题' }}_全展示.png
+                  {{ String(clickSequence.length + 1).padStart(2, '0') }}_{{ titleText || '标题' }}_全高亮.png
                 </li>
               </ul>
             </div>
@@ -624,19 +986,113 @@
 
 <script lang="ts">
 import { defineComponent, ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
-import { isSymbol, processText } from '@/utils/textProcessor'
-import { CharInfo } from '@/types/game'
+import { isSymbol, processParagraphUnits, TextUnit, isSpace, isSlash } from '@/utils/textProcessor'
 import questionBoarderSvg from '@/assets/question-boarder.svg'
-import { toPng, toBlob, getFontEmbedCSS } from 'html-to-image'
+import { toBlob, getFontEmbedCSS } from 'html-to-image'
 import JSZip from 'jszip'
 
-// 点开顺序步骤数据接口
+// 玩家信息数据接口 (支持 1 到 6 人，不同高亮色彩体系)
+export interface Player {
+  id: number
+  name: string
+  color: string
+  bgColor: string
+  borderColor: string
+  darkBgColor: string
+  darkColor: string
+  darkBorderColor: string
+}
+
+// 6 位预置玩家高对比色彩配置 (兼顾浅色、暗黑、抠像模式)
+export const ALL_PRESET_PLAYERS: Player[] = [
+  {
+    id: 1,
+    name: '玩家 1 (P1)',
+    color: '#0284c7',
+    bgColor: '#e0f2fe',
+    borderColor: '#7dd3fc',
+    darkBgColor: '#075985',
+    darkColor: '#f0f9ff',
+    darkBorderColor: '#38bdf8'
+  },
+  {
+    id: 2,
+    name: '玩家 2 (P2)',
+    color: '#e11d48',
+    bgColor: '#ffe4e6',
+    borderColor: '#fda4af',
+    darkBgColor: '#9f1239',
+    darkColor: '#fff1f2',
+    darkBorderColor: '#fb7185'
+  },
+  {
+    id: 3,
+    name: '玩家 3 (P3)',
+    color: '#059669',
+    bgColor: '#d1fae5',
+    borderColor: '#6ee7b7',
+    darkBgColor: '#065f46',
+    darkColor: '#ecfdf5',
+    darkBorderColor: '#34d399'
+  },
+  {
+    id: 4,
+    name: '玩家 4 (P4)',
+    color: '#d97706',
+    bgColor: '#fef3c7',
+    borderColor: '#fcd34d',
+    darkBgColor: '#92400e',
+    darkColor: '#fffbeb',
+    darkBorderColor: '#fbbf24'
+  },
+  {
+    id: 5,
+    name: '玩家 5 (P5)',
+    color: '#7c3aed',
+    bgColor: '#ede9fe',
+    borderColor: '#c4b5fd',
+    darkBgColor: '#5b21b6',
+    darkColor: '#f5f3ff',
+    darkBorderColor: '#a78bfa'
+  },
+  {
+    id: 6,
+    name: '玩家 6 (P6)',
+    color: '#c026d3',
+    bgColor: '#fae8ff',
+    borderColor: '#f0abfc',
+    darkBgColor: '#86198f',
+    darkColor: '#fdf4ff',
+    darkBorderColor: '#f0abfc'
+  }
+]
+
+// 单元归属记录接口
+export interface UnitOwnerInfo {
+  playerId: number
+  round: number
+}
+
+// 高亮顺序步骤数据接口
 export interface ClickSequenceStep {
   id: number
   order: number
-  char: string
-  revealedSnapshot: string[]
+  text: string
+  key: string
+  revealedSnapshot: [string, UnitOwnerInfo][]
   count: number
+  playerId?: number
+  playerName?: string
+  playerColor?: string
+  round?: number
+}
+
+// 历史快照接口
+export interface HistoryState {
+  owners: [string, UnitOwnerInfo][]
+  turnPickedKeys: string[]
+  playerIndex: number
+  round: number
 }
 
 export default defineComponent({
@@ -645,14 +1101,36 @@ export default defineComponent({
     // 默认示例文章
     const sampleTitle = '地力'
     const sampleContent =
-      '地力是指一个人所持有的基本实力。在音乐游戏中，这个词被广泛使用，特别是在IIDX中。虽然有多种解读方式，但核心还是指向一个人的实力水平。地力主要衡量一个人处理复杂谱面的能力，地力越强，处理复杂谱面的能力就越强。'
+      '地力是指一个人所持有的基本实力。在音乐游戏中，这个词被广泛使用，特别是在iidx中。虽然有多种解读方式，但核心还是指向一个人的实力水平。地力主要衡量一个人处理复杂谱面的能力，地力越强，处理复杂谱面的能力就越强。'
 
     const fileInputRef = ref<HTMLInputElement | null>(null)
     const stageWrapperRef = ref<HTMLElement | null>(null)
     const screenBoxRef = ref<HTMLElement | null>(null)
-    const upPartRef = ref<HTMLElement | null>(null)
 
-    // 点开顺序序列追踪
+    // 玩家配置 (min 1 人, max 6 人，默认 2 人)
+    const players = ref<Player[]>([
+      { ...ALL_PRESET_PLAYERS[0] },
+      { ...ALL_PRESET_PLAYERS[1] }
+    ])
+    const currentPlayerIndex = ref(0)
+    const currentRound = ref(1)
+    const turnBasedMode = ref(true)
+
+    // 当前行动玩家
+    const currentPlayer = computed(() => {
+      return players.value[currentPlayerIndex.value] || players.value[0]
+    })
+
+    // 当前回合内已选高亮的词汇 key 列表 (限制：最少 1 个，最多 3 个)
+    const currentTurnPickedKeys = ref<string[]>([])
+
+    // 已高亮的正文单元字典 (key -> { playerId, round })
+    const unitOwnerMap = ref<Map<string, UnitOwnerInfo>>(new Map())
+
+    // 兼容层：已高亮 unit key 集合
+    const highlightedUnitSet = computed(() => new Set(unitOwnerMap.value.keys()))
+
+    // 高亮顺序序列追踪
     const clickSequence = ref<ClickSequenceStep[]>([])
     const isRecordingSequence = ref(true)
     const currentPreviewStepIndex = ref<number | null>(null)
@@ -670,27 +1148,44 @@ export default defineComponent({
     const currentFileName = ref('')
     const titleText = ref('')
     const contentText = ref('')
-    const titleChars = ref<CharInfo[]>([])
-    const contentChars = ref<CharInfo[]>([])
+    const paragraphUnits = ref<TextUnit[]>([])
 
-    // 题目边框与录屏指示器配置
-    const showBoarder = ref(true)
+    // 题目边框与录屏指示器配置 (默认关闭题目边框)
+    const showBoarder = ref(false)
     const hideIndicators = ref(false)
     const boarderDataUrl = ref<string>(questionBoarderSvg)
     let sessionFontEmbedCSS: string | undefined = undefined
 
-    // 已揭示的字符集合（统一转小写规范匹配，英文字母大小写全解，中文字符直接匹配）
-    const revealedCharSet = ref<Set<string>>(new Set())
+    // 悬浮单元高亮追踪 (存储 unit.key)
+    const hoveredKey = ref<string | null>(null)
 
-    // 悬浮字符高亮追踪
-    const hoveredChar = ref<string | null>(null)
-
-    // 点击模式: 'toggle' (切换) 或 'reveal' (仅揭示)
+    // 点击模式: 'toggle' (切换) 或 'reveal' (仅高亮)
     const clickMode = ref<'toggle' | 'reveal'>('toggle')
 
-    // 撤销/重做栈（保存每次操作后的 Set 序列化数组）
-    const historyStack = ref<string[][]>([])
+    // 撤销/重做栈
+    const historyStack = ref<HistoryState[]>([])
     const historyIndex = ref(-1)
+
+    // 分栏排版配置 (默认 2 栏)
+    const columnCount = ref(2)
+    const columnGap = ref(50)
+
+    // 侧边栏与高亮单元列表
+    interface SidebarUnitItem {
+      key: string
+      text: string
+      isWord: boolean
+      count: number
+      firstIndex: number
+    }
+
+    const showSidebar = ref(true)
+    const showTopTurnBar = ref(true)
+    const isSidebarTurnSectionCollapsed = ref(false)
+    const sidebarPlayerFilter = ref<number | null>(null)
+    const sidebarTab = ref<'highlighted' | 'all'>('highlighted')
+    const sidebarSearch = ref('')
+    const sidebarSort = ref<'freq' | 'order' | 'alpha'>('freq')
 
     // 样式与排版配置
     const theme = ref<'theme-light' | 'theme-dark' | 'theme-green' | 'theme-blue' | 'theme-transparent'>('theme-light')
@@ -705,12 +1200,20 @@ export default defineComponent({
       fontWeight: 'bold' as const
     }))
 
-    const bodyStyle = computed(() => ({
-      fontSize: `${bodyFontSize.value}px`
-    }))
+    const bodyStyle = computed(() => {
+      const style: Record<string, string | number | undefined> = {
+        fontSize: `${bodyFontSize.value}px`
+      }
+      if (columnCount.value > 1) {
+        style.columnCount = columnCount.value
+        style.columnGap = `${columnGap.value}px`
+        style.columnRule = '1px dashed rgba(148, 163, 184, 0.25)'
+      }
+      return style
+    })
 
-    // 视窗尺寸配置：固定宽度 1920px，两个视窗共享高度，默认 350px
-    const boxHeight = ref(350)
+    // 视窗尺寸配置：固定宽度 1920px，高度默认全屏 1080px
+    const boxHeight = ref(1080)
     const isAutoHeight = ref(false)
 
     const isNativeBoarderHeight = computed(() => {
@@ -744,91 +1247,286 @@ export default defineComponent({
       }, 2500)
     }
 
-    // 字符 Key 标准化
-    const getCharKey = (char: string): string => {
-      return char.toLowerCase()
+    // 判断是否为斜杠字符
+    const isSlashChar = (text: string): boolean => {
+      return isSlash(text)
     }
 
-    // 判断是否为斜杠字符（呈现为全宽方格样式）
-    const isSlashChar = (char: string): boolean => {
-      return char === '/' || char === '／' || char === '\\'
+    // 判断是否为空格字符
+    const isSpaceChar = (text: string): boolean => {
+      return isSpace(text)
     }
 
-    // 判断是否为空格字符（呈现为全宽方格占位，作为符号默认直接显示）
-    const isSpaceChar = (char: string): boolean => {
-      return char === ' ' || char === '\u3000' || char === '\t' || char === '\u00A0'
+    // 判断单元是否已高亮
+    const isUnitHighlighted = (key: string): boolean => {
+      if (!key) return false
+      return unitOwnerMap.value.has(key)
     }
 
-    // 判断字符是否已揭示
-    const isCharRevealed = (char: string): boolean => {
-      if (isSymbol(char)) return true
-      return revealedCharSet.value.has(getCharKey(char))
+    // 玩家与回合制操作方法
+    const addPlayer = () => {
+      if (players.value.length >= 6) {
+        showToast('最多支持 6 位玩家', 'warning')
+        return
+      }
+      const nextPreset = ALL_PRESET_PLAYERS[players.value.length]
+      players.value.push({ ...nextPreset })
+      showToast(`已增加玩家：【${nextPreset.name}】(高亮色: ${nextPreset.color})`, 'success')
     }
 
-    // 判断当前字符是否与鼠标悬停的字符相同（用于全篇高亮对照）
-    const isMatchHover = (char: string): boolean => {
-      if (!hoveredChar.value || isSymbol(char)) return false
-      return getCharKey(char) === hoveredChar.value
+    const removePlayer = () => {
+      if (players.value.length <= 1) {
+        showToast('最少需要 1 位玩家', 'warning')
+        return
+      }
+      const removed = players.value.pop()
+      if (sidebarPlayerFilter.value === removed?.id) {
+        sidebarPlayerFilter.value = null
+      }
+      if (currentPlayerIndex.value >= players.value.length) {
+        currentPlayerIndex.value = 0
+      }
+      showToast(`已移除玩家：【${removed?.name}】`)
     }
 
-    const setHoveredChar = (char: string) => {
-      if (!isSymbol(char)) {
-        hoveredChar.value = getCharKey(char)
+    const renamePlayer = (p: Player) => {
+      const newName = window.prompt(`修改玩家名称：`, p.name)
+      if (newName && newName.trim()) {
+        p.name = newName.trim()
+        showToast(`已重命名为【${p.name}】`)
       }
     }
 
-    const clearHoveredChar = () => {
-      hoveredChar.value = null
+    const setCurrentPlayerIndex = (idx: number) => {
+      if (idx < 0 || idx >= players.value.length) return
+      if (idx === currentPlayerIndex.value) return
+      if (currentTurnPickedKeys.value.length > 0) {
+        const ok = window.confirm(`【${currentPlayer.value.name}】本回合还有已选词汇，切换玩家将提交当前选择并换人，是否继续？`)
+        if (!ok) return
+        currentTurnPickedKeys.value = []
+      }
+      currentPlayerIndex.value = idx
+      showToast(`已切换至【${currentPlayer.value.name}】的回合`)
+    }
+
+    // 结束当前回合 (进入下一位玩家)
+    const endCurrentTurn = () => {
+      if (turnBasedMode.value && currentTurnPickedKeys.value.length < 1) {
+        showToast('本回合至少需高亮 1 个词汇才能结束回合', 'warning')
+        return
+      }
+      const prevPlayerName = currentPlayer.value.name
+      const count = currentTurnPickedKeys.value.length
+
+      // 切换到下一个玩家
+      currentPlayerIndex.value = (currentPlayerIndex.value + 1) % players.value.length
+      if (currentPlayerIndex.value === 0) {
+        currentRound.value++
+      }
+      currentTurnPickedKeys.value = []
+      saveStateToHistory()
+
+      showToast(`【${prevPlayerName}】结束回合 (选了 ${count} 个)，轮到【${currentPlayer.value.name}】行动`, 'success')
+    }
+
+    // 撤回当前回合的选择
+    const cancelCurrentTurnPicks = () => {
+      if (currentTurnPickedKeys.value.length === 0) return
+      currentTurnPickedKeys.value.forEach(k => {
+        unitOwnerMap.value.delete(k)
+        if (isRecordingSequence.value) {
+          const sIdx = clickSequence.value.findIndex(s => s.key === k)
+          if (sIdx !== -1) {
+            clickSequence.value.splice(sIdx, 1)
+          }
+        }
+      })
+      if (isRecordingSequence.value) {
+        clickSequence.value.forEach((s, i) => (s.order = i + 1))
+      }
+      unitOwnerMap.value = new Map(unitOwnerMap.value)
+      currentTurnPickedKeys.value = []
+      saveStateToHistory()
+      showToast('已撤回本回合全部选择')
+    }
+
+    // 获取玩家高亮总数
+    const getPlayerHighlightCount = (playerId: number): number => {
+      let count = 0
+      unitOwnerMap.value.forEach(v => {
+        if (v.playerId === playerId) count++
+      })
+      return count
+    }
+
+    // 获取单元归属玩家
+    const getUnitOwnerPlayer = (key: string): Player | null => {
+      const ownerInfo = unitOwnerMap.value.get(key)
+      if (!ownerInfo) return null
+      return players.value.find(p => p.id === ownerInfo.playerId) || null
+    }
+
+    // 获取单元对应玩家的主题高亮样式 (支持不同玩家色彩与不同录屏主题)
+    const getUnitPlayerStyle = (key: string) => {
+      if (!isUnitHighlighted(key)) return {}
+      const ownerInfo = unitOwnerMap.value.get(key)
+      const playerId = ownerInfo?.playerId
+      const player = players.value.find(p => p.id === playerId) || players.value[0]
+      if (!player) return {}
+
+      const isDark = theme.value === 'theme-dark'
+      const isChroma = theme.value === 'theme-green' || theme.value === 'theme-blue'
+
+      if (isChroma) {
+        return {
+          backgroundColor: player.color,
+          color: '#ffffff',
+          borderColor: '#ffffff',
+          fontWeight: '700'
+        }
+      }
+
+      if (isDark) {
+        return {
+          backgroundColor: player.darkBgColor,
+          color: player.darkColor,
+          borderColor: player.darkBorderColor,
+          fontWeight: '700'
+        }
+      }
+
+      return {
+        backgroundColor: player.bgColor,
+        color: player.color,
+        borderColor: player.borderColor,
+        fontWeight: '700'
+      }
+    }
+
+    // 判断当前单元是否与鼠标悬停的单元相同（用于全篇高亮对照）
+    const isMatchHover = (key: string): boolean => {
+      if (!hoveredKey.value || !key) return false
+      return hoveredKey.value === key
+    }
+
+    const setHoveredKey = (key: string) => {
+      if (key) {
+        hoveredKey.value = key
+      }
+    }
+
+    const clearHoveredKey = () => {
+      hoveredKey.value = null
     }
 
     // 统计相关计算
-    const allChars = computed(() => [...titleChars.value, ...contentChars.value])
-
-    const nonSymbolChars = computed(() => {
-      return allChars.value.filter(c => !isSymbol(c.char))
+    const nonSymbolUnits = computed(() => {
+      return paragraphUnits.value.filter(u => !u.isSymbol && !u.isNewline)
     })
 
-    const totalNonSymbolCount = computed(() => nonSymbolChars.value.length)
+    const totalNonSymbolCount = computed(() => nonSymbolUnits.value.length)
 
-    const revealedNonSymbolCount = computed(() => {
-      return nonSymbolChars.value.filter(c => isCharRevealed(c.char)).length
+    const highlightedNonSymbolCount = computed(() => {
+      return nonSymbolUnits.value.filter(u => isUnitHighlighted(u.key)).length
     })
 
-    const revealProgress = computed(() => {
+    const highlightProgress = computed(() => {
       if (totalNonSymbolCount.value === 0) return 0
-      return Math.round((revealedNonSymbolCount.value / totalNonSymbolCount.value) * 100)
+      return Math.round((highlightedNonSymbolCount.value / totalNonSymbolCount.value) * 100)
     })
 
-    const uniqueCharSet = computed(() => {
+    const uniqueUnitKeys = computed(() => {
       const s = new Set<string>()
-      nonSymbolChars.value.forEach(c => s.add(getCharKey(c.char)))
+      nonSymbolUnits.value.forEach(u => s.add(u.key))
       return s
     })
 
-    const uniqueCharCount = computed(() => uniqueCharSet.value.size)
+    const uniqueUnitCount = computed(() => uniqueUnitKeys.value.size)
 
-    const uniqueRevealedCount = computed(() => {
-      let count = 0
-      uniqueCharSet.value.forEach(k => {
-        if (revealedCharSet.value.has(k)) count++
-      })
-      return count
+    const uniqueHighlightedCount = computed(() => {
+      return unitOwnerMap.value.size
     })
+
+    // 侧边栏全部独立词汇/字符汇总
+    const allUniqueUnits = computed<SidebarUnitItem[]>(() => {
+      const map = new Map<string, SidebarUnitItem>()
+      nonSymbolUnits.value.forEach((u, index) => {
+        const existing = map.get(u.key)
+        if (existing) {
+          existing.count++
+        } else {
+          map.set(u.key, {
+            key: u.key,
+            text: u.text,
+            isWord: !!u.isWord,
+            count: 1,
+            firstIndex: index
+          })
+        }
+      })
+      return Array.from(map.values())
+    })
+
+    // 已高亮词汇/字符列表
+    const highlightedList = computed<SidebarUnitItem[]>(() => {
+      return allUniqueUnits.value.filter(u => highlightedUnitSet.value.has(u.key))
+    })
+
+    // 侧边栏当前展示列表（结合检索、玩家筛选与排序规则）
+    const displayedSidebarUnits = computed<SidebarUnitItem[]>(() => {
+      const source = sidebarTab.value === 'highlighted' ? highlightedList.value : allUniqueUnits.value
+      let list = source
+      if (sidebarPlayerFilter.value !== null) {
+        list = list.filter(item => {
+          const owner = unitOwnerMap.value.get(item.key)
+          return owner && owner.playerId === sidebarPlayerFilter.value
+        })
+      }
+      if (sidebarSearch.value.trim()) {
+        const q = sidebarSearch.value.trim().toLowerCase()
+        list = list.filter(item => item.text.toLowerCase().includes(q))
+      }
+      return [...list].sort((a, b) => {
+        if (sidebarSort.value === 'freq') {
+          return b.count - a.count || a.firstIndex - b.firstIndex
+        } else if (sidebarSort.value === 'order') {
+          return a.firstIndex - b.firstIndex
+        } else {
+          return a.text.localeCompare(b.text, 'zh-CN')
+        }
+      })
+    })
+
+    const toggleSidebar = () => {
+      showSidebar.value = !showSidebar.value
+      nextTick(() => {
+        updateFitScale()
+      })
+    }
 
     // 历史栈记录
     const saveStateToHistory = () => {
-      const currentList = Array.from(revealedCharSet.value)
+      const state: HistoryState = {
+        owners: Array.from(unitOwnerMap.value.entries()),
+        turnPickedKeys: [...currentTurnPickedKeys.value],
+        playerIndex: currentPlayerIndex.value,
+        round: currentRound.value
+      }
       if (historyIndex.value < historyStack.value.length - 1) {
         historyStack.value = historyStack.value.slice(0, historyIndex.value + 1)
       }
-      historyStack.value.push(currentList)
+      historyStack.value.push(state)
       historyIndex.value = historyStack.value.length - 1
     }
 
     const undo = () => {
       if (historyIndex.value > 0) {
         historyIndex.value--
-        revealedCharSet.value = new Set(historyStack.value[historyIndex.value])
+        const state = historyStack.value[historyIndex.value]
+        unitOwnerMap.value = new Map(state.owners)
+        currentTurnPickedKeys.value = [...state.turnPickedKeys]
+        currentPlayerIndex.value = state.playerIndex
+        currentRound.value = state.round
         showToast('已撤销上一步操作')
       }
     }
@@ -836,12 +1534,16 @@ export default defineComponent({
     const redo = () => {
       if (historyIndex.value < historyStack.value.length - 1) {
         historyIndex.value++
-        revealedCharSet.value = new Set(historyStack.value[historyIndex.value])
+        const state = historyStack.value[historyIndex.value]
+        unitOwnerMap.value = new Map(state.owners)
+        currentTurnPickedKeys.value = [...state.turnPickedKeys]
+        currentPlayerIndex.value = state.playerIndex
+        currentRound.value = state.round
         showToast('已恢复操作')
       }
     }
 
-    // 文本解析载入（提前将所有大写字母转为小写）
+    // 文本解析载入（预处理：统一转为小写，无大写字母展示；第一行标题正常展示，第二行起正文按词汇与汉字单元化解析）
     const loadText = (text: string, filename = '') => {
       const normalizedText = text.toLowerCase()
       const lines = normalizedText.split(/\r?\n/).map(l => l.trimEnd())
@@ -854,14 +1556,23 @@ export default defineComponent({
       contentText.value = lines.length > 1 ? lines.slice(1).join('\n').trim() : ''
       currentFileName.value = filename
 
-      titleChars.value = processText(titleText.value)
-      contentChars.value = processText(contentText.value)
+      paragraphUnits.value = processParagraphUnits(contentText.value)
 
-      // 重置揭示状态与历史及序列
-      revealedCharSet.value.clear()
+      // 重置高亮状态与历史及序列
+      unitOwnerMap.value.clear()
+      unitOwnerMap.value = new Map()
+      currentTurnPickedKeys.value = []
+      sidebarPlayerFilter.value = null
+      currentPlayerIndex.value = 0
+      currentRound.value = 1
       clickSequence.value = []
       currentPreviewStepIndex.value = null
-      historyStack.value = [[]]
+      historyStack.value = [{
+        owners: [],
+        turnPickedKeys: [],
+        playerIndex: 0,
+        round: 1
+      }]
       historyIndex.value = 0
       sessionFontEmbedCSS = undefined
 
@@ -882,21 +1593,25 @@ export default defineComponent({
     }
 
     // 记录点击步骤到序列
-    const recordSequenceStep = (char: string) => {
-      const key = getCharKey(char)
-      const existing = clickSequence.value.find(s => getCharKey(s.char) === key)
+    const recordSequenceStep = (key: string, text: string, player: Player) => {
+      const existing = clickSequence.value.find(s => s.key === key)
       if (existing) {
-        existing.revealedSnapshot = Array.from(revealedCharSet.value)
+        existing.revealedSnapshot = Array.from(unitOwnerMap.value.entries())
         return
       }
 
-      const count = allChars.value.filter(c => getCharKey(c.char) === key).length
+      const count = nonSymbolUnits.value.filter(u => u.key === key).length
       clickSequence.value.push({
         id: Date.now() + Math.random(),
         order: clickSequence.value.length + 1,
-        char,
-        revealedSnapshot: Array.from(revealedCharSet.value),
-        count
+        text,
+        key,
+        revealedSnapshot: Array.from(unitOwnerMap.value.entries()),
+        count,
+        playerId: player.id,
+        playerName: player.name,
+        playerColor: player.color,
+        round: currentRound.value
       })
     }
 
@@ -905,13 +1620,16 @@ export default defineComponent({
       if (clickSequence.value.length === 0) return
       const removed = clickSequence.value.pop()
       if (clickSequence.value.length === 0) {
-        revealedCharSet.value.clear()
+        unitOwnerMap.value.clear()
+        unitOwnerMap.value = new Map()
+        currentTurnPickedKeys.value = []
       } else {
         const lastStep = clickSequence.value[clickSequence.value.length - 1]
-        revealedCharSet.value = new Set(lastStep.revealedSnapshot)
+        unitOwnerMap.value = new Map(lastStep.revealedSnapshot)
+        currentTurnPickedKeys.value = currentTurnPickedKeys.value.filter(k => k !== removed?.key)
       }
       saveStateToHistory()
-      showToast(`已撤回序列最后一步【${removed?.char}】`)
+      showToast(`已撤回序列最后一步【${removed?.text}】`)
     }
 
     // 删除序列中的指定步骤
@@ -920,66 +1638,91 @@ export default defineComponent({
       const removed = clickSequence.value.splice(idx, 1)[0]
       clickSequence.value.forEach((s, i) => (s.order = i + 1))
       if (removed) {
-        revealedCharSet.value.delete(getCharKey(removed.char))
+        unitOwnerMap.value.delete(removed.key)
+        unitOwnerMap.value = new Map(unitOwnerMap.value)
+        currentTurnPickedKeys.value = currentTurnPickedKeys.value.filter(k => k !== removed.key)
       }
       saveStateToHistory()
-      showToast(`已移除第 ${idx + 1} 步【${removed?.char}】`)
+      showToast(`已移除第 ${idx + 1} 步【${removed?.text}】`)
     }
 
-    // 清空序列（重置已翻开黑块回到初始全遮罩状态）
+    // 清空序列（重置正文回到未高亮状态）
     const clearSequence = () => {
       clickSequence.value = []
       currentPreviewStepIndex.value = null
-      revealedCharSet.value.clear()
+      unitOwnerMap.value.clear()
+      unitOwnerMap.value = new Map()
+      currentTurnPickedKeys.value = []
       saveStateToHistory()
-      showToast('已清空序列并恢复为初始未翻开状态')
+      showToast('已清空序列并恢复为未高亮状态')
     }
 
     // 预览某一步骤状态
     const previewStep = (idx: number) => {
       if (idx < 0 || idx >= clickSequence.value.length) return
       const step = clickSequence.value[idx]
-      revealedCharSet.value = new Set(step.revealedSnapshot)
+      unitOwnerMap.value = new Map(step.revealedSnapshot)
       currentPreviewStepIndex.value = idx
-      showToast(`正在预览第 ${step.order} 步画面（点开【${step.char}】）`)
+      showToast(`正在预览第 ${step.order} 步画面（【${step.playerName || '玩家'}】高亮【${step.text}】）`)
     }
 
-    // 字符点击处理
-    const handleCharClick = (char: string) => {
-      if (isSymbol(char)) return
+    // 单元点击处理（支持回合制限制 1~3 个，以及按玩家归属着色）
+    const handleUnitClick = (key: string, text: string) => {
+      if (!key) return
 
-      const key = getCharKey(char)
-      const isAlreadyRevealed = revealedCharSet.value.has(key)
+      const isAlreadyHighlighted = unitOwnerMap.value.has(key)
 
-      if (clickMode.value === 'toggle') {
-        if (isAlreadyRevealed) {
-          revealedCharSet.value.delete(key)
+      if (isAlreadyHighlighted) {
+        // 如果是在当前回合由当前玩家选中的，允许反选撤回
+        if (currentTurnPickedKeys.value.includes(key)) {
+          unitOwnerMap.value.delete(key)
+          unitOwnerMap.value = new Map(unitOwnerMap.value)
+
+          const idx = currentTurnPickedKeys.value.indexOf(key)
+          if (idx !== -1) {
+            currentTurnPickedKeys.value.splice(idx, 1)
+          }
+
           if (isRecordingSequence.value) {
-            const idx = clickSequence.value.findIndex(s => getCharKey(s.char) === key)
-            if (idx !== -1) {
-              clickSequence.value.splice(idx, 1)
+            const sIdx = clickSequence.value.findIndex(s => s.key === key)
+            if (sIdx !== -1) {
+              clickSequence.value.splice(sIdx, 1)
               clickSequence.value.forEach((s, i) => (s.order = i + 1))
             }
           }
-          showToast(`已隐藏字符: "${char}"`)
+
+          saveStateToHistory()
+          showToast(`已取消选择【${text}】 (本回合已选 ${currentTurnPickedKeys.value.length}/3)`)
+          return
         } else {
-          revealedCharSet.value.add(key)
-          if (isRecordingSequence.value) {
-            recordSequenceStep(char)
-          }
-          showToast(`已揭示字符: "${char}"`)
-        }
-      } else {
-        if (!isAlreadyRevealed) {
-          revealedCharSet.value.add(key)
-          if (isRecordingSequence.value) {
-            recordSequenceStep(char)
-          }
-          showToast(`已揭示字符: "${char}"`)
+          const owner = getUnitOwnerPlayer(key)
+          showToast(`【${text}】已被【${owner?.name || '其他回合'}】高亮，不可撤销`, 'warning')
+          return
         }
       }
 
+      // 尚未高亮，尝试高亮
+      if (turnBasedMode.value && currentTurnPickedKeys.value.length >= 3) {
+        showToast(`⚠️ 本回合已选满 3 个（已达上限），请点击“结束回合”或撤销当前选择`, 'warning')
+        return
+      }
+
+      const curP = currentPlayer.value
+      unitOwnerMap.value.set(key, { playerId: curP.id, round: currentRound.value })
+      unitOwnerMap.value = new Map(unitOwnerMap.value)
+      currentTurnPickedKeys.value.push(key)
+
+      if (isRecordingSequence.value) {
+        recordSequenceStep(key, text, curP)
+      }
+
       saveStateToHistory()
+
+      if (turnBasedMode.value && currentTurnPickedKeys.value.length === 3) {
+        showToast(`🎉【${curP.name}】已选满 3 个！可点击“结束回合”轮到下一位玩家`, 'success')
+      } else {
+        showToast(`【${curP.name}】已高亮【${text}】(本轮 ${currentTurnPickedKeys.value.length}/3)`)
+      }
     }
 
     // 获取当前录屏主题对应的背景色
@@ -1078,9 +1821,9 @@ export default defineComponent({
       }
 
       // 3. 降级回退
-      if (upPartRef.value) {
+      if (screenBoxRef.value) {
         try {
-          return await getFontEmbedCSS(upPartRef.value, { preferredFontFormat: 'woff2' })
+          return await getFontEmbedCSS(screenBoxRef.value, { preferredFontFormat: 'woff2' })
         } catch {
           return ''
         }
@@ -1089,10 +1832,10 @@ export default defineComponent({
       return ''
     }
 
-    // 捕获呈现区 1920p 画面为 PNG Blob（直接生成二进制 Blob，避免 Base64 巨大内存转换开销，并复用预编译字体样式）
-    const captureUpPartBlob = async (): Promise<Blob> => {
-      if (!upPartRef.value) {
-        throw new Error('未找到呈现区 DOM 元素')
+    // 捕获展示区 1920p 画面为 PNG Blob
+    const captureScreenBoxBlob = async (): Promise<Blob> => {
+      if (!screenBoxRef.value) {
+        throw new Error('未找到展示区 DOM 元素')
       }
 
       await nextTick()
@@ -1102,7 +1845,7 @@ export default defineComponent({
       // 当开启边框时，边框SVG应完整铺满整个画面，底色设为透明以杜绝任何底色白边漏出；若未开启边框，则填充对应录屏主题底色
       const canvasBg = showBoarder.value ? undefined : bg
 
-      const blob = await toBlob(upPartRef.value, {
+      const blob = await toBlob(screenBoxRef.value, {
         width: 1920,
         height: boxHeight.value,
         pixelRatio: 1,
@@ -1132,10 +1875,10 @@ export default defineComponent({
       return blob
     }
 
-    // 导出当前画面（无需开启/不依赖顺序序列，直接将呈现区当前状态导出为一张 1920p 图片）
+    // 导出当前画面（直接将展示区当前状态导出为一张 1920p 图片）
     const exportCurrentFrame = async () => {
       if (isExporting.value) return
-      hoveredChar.value = null
+      hoveredKey.value = null
       isExporting.value = true
 
       try {
@@ -1152,7 +1895,7 @@ export default defineComponent({
 
         const safeTitle = (titleText.value.trim() || '未命名文章').replace(/[\\/:*?"<>|]/g, '_')
         const filename = `${safeTitle}_当前画面.png`
-        const blob = await captureUpPartBlob()
+        const blob = await captureScreenBoxBlob()
 
         const url = URL.createObjectURL(blob)
         const link = document.createElement('a')
@@ -1173,7 +1916,7 @@ export default defineComponent({
     // 打开批量导出配置弹窗
     const openExportModal = () => {
       if (clickSequence.value.length === 0) {
-        showToast('当前尚未记录点开顺序，请先在文字上点击字符', 'warning')
+        showToast('当前尚未记录高亮顺序，请先在正文点击单词或汉字', 'warning')
         return
       }
       exportModalVisible.value = true
@@ -1183,8 +1926,9 @@ export default defineComponent({
     const startExport = async () => {
       if (clickSequence.value.length === 0 || isExporting.value) return
 
-      hoveredChar.value = null
-      const originalRevealedState = new Set(revealedCharSet.value)
+      hoveredKey.value = null
+      hoveredKey.value = null
+      const originalOwnerState = new Map(unitOwnerMap.value)
       isExporting.value = true
       exportProgress.value = 0
       exportStatusText.value = '准备渲染...'
@@ -1197,7 +1941,7 @@ export default defineComponent({
       let completedSteps = 0
 
       try {
-        // 1. 首次导出预先提取当前文章命中的字体切片（毫秒级极速嵌入，100% 杜绝字体缺失与粗细不一）
+        // 1. 首次导出预先提取当前文章命中的字体切片
         if (!sessionFontEmbedCSS) {
           exportStatusText.value = '正在预编译高清字体资源...'
           try {
@@ -1210,30 +1954,31 @@ export default defineComponent({
 
         if (exportAsZip.value) {
           const zip = new JSZip()
-          const folder = zip.folder(`${safeTitle}_点开序列_1920p`) || zip
+          const folder = zip.folder(`${safeTitle}_高亮序列_1920p`) || zip
 
-          // 若勾选，先渲染第 00 步（初始全遮罩）
+          // 若勾选，先渲染第 00 步（全初始未高亮）
           if (includeInitialFrame.value) {
             exportStatusText.value = `正在渲染第 00 步: 00_${safeTitle}_初始.png (1 / ${totalSteps})`
-            revealedCharSet.value = new Set()
-            const blob = await captureUpPartBlob()
+            unitOwnerMap.value = new Map()
+            const blob = await captureScreenBoxBlob()
             folder.file(`00_${safeTitle}_初始.png`, blob)
             completedSteps++
             exportProgress.value = Math.round((completedSteps / totalSteps) * 90)
             await new Promise(resolve => setTimeout(resolve, 20))
           }
 
-          // 逐帧渲染记录的每个点开步骤（直接以 Blob 存入 zip，零 Base64 转换开销）
+          // 逐帧渲染记录的每个高亮步骤 (保持各自玩家高亮颜色)
           for (let i = 0; i < clickSequence.value.length; i++) {
             const step = clickSequence.value[i]
             const orderStr = String(step.order).padStart(2, '0')
-            const safeChar = step.char.replace(/[\\/:*?"<>|]/g, '_')
-            const filename = `${orderStr}_${safeTitle}_${safeChar}.png`
+            const safeText = step.text.replace(/[\\/:*?"<>|]/g, '_')
+            const pPrefix = step.playerName ? `[${step.playerName.split(' ')[0]}]_` : ''
+            const filename = `${orderStr}_${pPrefix}${safeTitle}_${safeText}.png`
 
             exportStatusText.value = `正在渲染第 ${orderStr} 步: ${filename} (${completedSteps + 1} / ${totalSteps})`
-            revealedCharSet.value = new Set(step.revealedSnapshot)
+            unitOwnerMap.value = new Map(step.revealedSnapshot)
 
-            const blob = await captureUpPartBlob()
+            const blob = await captureScreenBoxBlob()
             folder.file(filename, blob)
 
             completedSteps++
@@ -1241,14 +1986,18 @@ export default defineComponent({
             await new Promise(resolve => setTimeout(resolve, 20))
           }
 
-          // 若勾选，渲染最后一步（全展示无黑块）
+          // 若勾选，渲染最后一步（全正文高亮）
           if (includeFinalFullRevealFrame.value) {
             const finalOrderStr = String(clickSequence.value.length + 1).padStart(2, '0')
-            const filename = `${finalOrderStr}_${safeTitle}_全展示.png`
+            const filename = `${finalOrderStr}_${safeTitle}_全高亮.png`
             exportStatusText.value = `正在渲染最终步: ${filename} (${completedSteps + 1} / ${totalSteps})`
-            revealedCharSet.value = new Set(uniqueCharSet.value)
+            const fullMap = new Map<string, UnitOwnerInfo>()
+            uniqueUnitKeys.value.forEach(k => {
+              fullMap.set(k, originalOwnerState.get(k) || { playerId: 1, round: 1 })
+            })
+            unitOwnerMap.value = fullMap
 
-            const blob = await captureUpPartBlob()
+            const blob = await captureScreenBoxBlob()
             folder.file(filename, blob)
 
             completedSteps++
@@ -1256,7 +2005,7 @@ export default defineComponent({
             await new Promise(resolve => setTimeout(resolve, 20))
           }
 
-          // 生成 ZIP 压缩包并下载（PNG已自身具备极高压缩比，使用 STORE 模式秒级打包，杜绝 JS 重复压缩卡死）
+          // 生成 ZIP 压缩包并下载
           exportStatusText.value = '正在快速打包 ZIP 压缩文件...'
           const zipBlob = await zip.generateAsync(
             { type: 'blob', compression: 'STORE' },
@@ -1268,7 +2017,7 @@ export default defineComponent({
           const downloadUrl = URL.createObjectURL(zipBlob)
           const link = document.createElement('a')
           link.href = downloadUrl
-          link.download = `${safeTitle}_点开序列_1920p.zip`
+          link.download = `${safeTitle}_高亮序列_1920p.zip`
           link.click()
           setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000)
         } else {
@@ -1284,8 +2033,8 @@ export default defineComponent({
 
           if (includeInitialFrame.value) {
             exportStatusText.value = `正在导出: 00_${safeTitle}_初始.png (1 / ${totalSteps})`
-            revealedCharSet.value = new Set()
-            const blob = await captureUpPartBlob()
+            unitOwnerMap.value = new Map()
+            const blob = await captureScreenBoxBlob()
             downloadBlob(blob, `00_${safeTitle}_初始.png`)
             completedSteps++
             exportProgress.value = Math.round((completedSteps / totalSteps) * 100)
@@ -1295,13 +2044,14 @@ export default defineComponent({
           for (let i = 0; i < clickSequence.value.length; i++) {
             const step = clickSequence.value[i]
             const orderStr = String(step.order).padStart(2, '0')
-            const safeChar = step.char.replace(/[\\/:*?"<>|]/g, '_')
-            const filename = `${orderStr}_${safeTitle}_${safeChar}.png`
+            const safeText = step.text.replace(/[\\/:*?"<>|]/g, '_')
+            const pPrefix = step.playerName ? `[${step.playerName.split(' ')[0]}]_` : ''
+            const filename = `${orderStr}_${pPrefix}${safeTitle}_${safeText}.png`
 
             exportStatusText.value = `正在导出: ${filename} (${completedSteps + 1} / ${totalSteps})`
-            revealedCharSet.value = new Set(step.revealedSnapshot)
+            unitOwnerMap.value = new Map(step.revealedSnapshot)
 
-            const blob = await captureUpPartBlob()
+            const blob = await captureScreenBoxBlob()
             downloadBlob(blob, filename)
 
             completedSteps++
@@ -1311,11 +2061,15 @@ export default defineComponent({
 
           if (includeFinalFullRevealFrame.value) {
             const finalOrderStr = String(clickSequence.value.length + 1).padStart(2, '0')
-            const filename = `${finalOrderStr}_${safeTitle}_全展示.png`
+            const filename = `${finalOrderStr}_${safeTitle}_全高亮.png`
             exportStatusText.value = `正在导出: ${filename} (${completedSteps + 1} / ${totalSteps})`
-            revealedCharSet.value = new Set(uniqueCharSet.value)
+            const fullMap = new Map<string, UnitOwnerInfo>()
+            uniqueUnitKeys.value.forEach(k => {
+              fullMap.set(k, originalOwnerState.get(k) || { playerId: 1, round: 1 })
+            })
+            unitOwnerMap.value = fullMap
 
-            const blob = await captureUpPartBlob()
+            const blob = await captureScreenBoxBlob()
             downloadBlob(blob, filename)
 
             completedSteps++
@@ -1335,23 +2089,30 @@ export default defineComponent({
         showToast(`导出失败: ${err.message || '渲染异常'}`, 'warning')
       } finally {
         isExporting.value = false
-        revealedCharSet.value = originalRevealedState
+        unitOwnerMap.value = originalOwnerState
       }
     }
 
     // 批量操作
-    const revealAll = () => {
-      uniqueCharSet.value.forEach(k => revealedCharSet.value.add(k))
+    const highlightAll = () => {
+      nonSymbolUnits.value.forEach(u => {
+        if (!unitOwnerMap.value.has(u.key)) {
+          unitOwnerMap.value.set(u.key, { playerId: currentPlayer.value.id, round: currentRound.value })
+        }
+      })
+      unitOwnerMap.value = new Map(unitOwnerMap.value)
       saveStateToHistory()
-      showToast('已全部揭示', 'success')
+      showToast('已全部高亮', 'success')
     }
 
     const hideAll = () => {
-      revealedCharSet.value.clear()
+      unitOwnerMap.value.clear()
+      unitOwnerMap.value = new Map()
+      currentTurnPickedKeys.value = []
       clickSequence.value = []
       currentPreviewStepIndex.value = null
       saveStateToHistory()
-      showToast('已全部隐藏')
+      showToast('已取消全部高亮')
     }
 
     // 文件上传处理
@@ -1400,7 +2161,7 @@ export default defineComponent({
       if (isAutoHeight.value) {
         showToast('已开启自适应内容高度模式')
       } else {
-        setBoxHeight(350)
+        setBoxHeight(1080)
       }
     }
 
@@ -1424,9 +2185,8 @@ export default defineComponent({
 
     const totalUnscaledHeight = computed(() => {
       if (isAutoHeight.value) return 0
-      const indicatorsHeight = hideIndicators.value ? 0 : 72
-      const gapHeight = 32
-      return boxHeight.value * 2 + indicatorsHeight + gapHeight
+      const indicatorsHeight = hideIndicators.value ? 0 : 36
+      return boxHeight.value + indicatorsHeight + 20
     })
 
     const scalerContainerStyle = computed(() => {
@@ -1507,6 +2267,15 @@ export default defineComponent({
         return
       }
 
+      // Enter 键: 若当前回合已选 >= 1 个词，快捷结束回合
+      if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (currentTurnPickedKeys.value.length >= 1) {
+          endCurrentTurn()
+          e.preventDefault()
+          return
+        }
+      }
+
       // 撤销 / 重做 (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z)
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         if (e.shiftKey) {
@@ -1558,6 +2327,22 @@ export default defineComponent({
     })
 
     return {
+      players,
+      currentPlayerIndex,
+      currentRound,
+      turnBasedMode,
+      currentPlayer,
+      currentTurnPickedKeys,
+      unitOwnerMap,
+      addPlayer,
+      removePlayer,
+      renamePlayer,
+      setCurrentPlayerIndex,
+      endCurrentTurn,
+      cancelCurrentTurnPicks,
+      getPlayerHighlightCount,
+      getUnitOwnerPlayer,
+      getUnitPlayerStyle,
       fileInputRef,
       stageWrapperRef,
       screenBoxRef,
@@ -1565,9 +2350,8 @@ export default defineComponent({
       currentFileName,
       titleText,
       contentText,
-      titleChars,
-      contentChars,
-      hoveredChar,
+      paragraphUnits,
+      hoveredKey,
       clickMode,
       theme,
       titleFontSize,
@@ -1577,6 +2361,19 @@ export default defineComponent({
       charMargin,
       isVerticalCenter,
       textAlign,
+      columnCount,
+      columnGap,
+      showSidebar,
+      showTopTurnBar,
+      isSidebarTurnSectionCollapsed,
+      sidebarPlayerFilter,
+      toggleSidebar,
+      sidebarTab,
+      sidebarSearch,
+      sidebarSort,
+      allUniqueUnits,
+      highlightedList,
+      displayedSidebarUnits,
       boxHeight,
       isAutoHeight,
       zoomMode,
@@ -1590,22 +2387,22 @@ export default defineComponent({
       historyStack,
       historyIndex,
       totalNonSymbolCount,
-      revealedNonSymbolCount,
-      revealProgress,
-      uniqueCharCount,
-      uniqueRevealedCount,
-      isCharRevealed,
+      highlightedNonSymbolCount,
+      highlightProgress,
+      uniqueUnitCount,
+      uniqueHighlightedCount,
+      isUnitHighlighted,
       isSlashChar,
       isSpaceChar,
       isMatchHover,
-      setHoveredChar,
-      clearHoveredChar,
+      setHoveredKey,
+      clearHoveredKey,
       triggerFileInput,
       handleFileSelect,
       handleDrop,
       loadSampleText,
-      handleCharClick,
-      revealAll,
+      handleUnitClick,
+      highlightAll,
       hideAll,
       undo,
       redo,
@@ -1617,7 +2414,6 @@ export default defineComponent({
       setBoarderNativeSize,
       setBoxHeight,
       toggleAutoHeight,
-      upPartRef,
       clickSequence,
       isRecordingSequence,
       currentPreviewStepIndex,
@@ -1912,6 +2708,304 @@ select {
 .dim-hint {
   color: #64748b;
   font-size: 11px;
+}
+
+/* ==================== 回合制与玩家控制面板 ==================== */
+.turn-player-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: linear-gradient(180deg, #1c1e2a 0%, #161720 100%);
+  border-bottom: 1px solid #2d3142;
+  gap: 16px;
+  flex-shrink: 0;
+  z-index: 85;
+}
+
+.turn-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.player-count-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #cbd5e1;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.btn-group-tight {
+  display: flex;
+  gap: 2px;
+}
+
+.count-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 4px;
+  background-color: #272b3c;
+  border: 1px solid #3d445f;
+  color: #ffffff;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.count-btn:hover:not(:disabled) {
+  background-color: #3b82f6;
+  border-color: #60a5fa;
+}
+
+.count-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.players-chips-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 4px;
+}
+
+.player-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background-color: #202434;
+  border: 1px solid #343b52;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.player-chip:hover {
+  background-color: #282d42;
+  border-color: #4a5475;
+  transform: translateY(-1px);
+}
+
+.player-chip.is-current-turn {
+  background-color: #1e293b;
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+  font-weight: 700;
+}
+
+.player-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.player-name-text {
+  font-size: 12px;
+  color: #e2e8f0;
+}
+
+.player-score-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+.current-turn-badge-tag {
+  font-size: 10px;
+  background-color: #38bdf8;
+  color: #0f172a;
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-weight: 800;
+}
+
+.turn-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.round-indicator {
+  font-size: 12px;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.round-indicator strong {
+  color: #f59e0b;
+  font-size: 14px;
+}
+
+.turn-status-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 1px solid;
+  transition: all 0.2s;
+}
+
+.active-player-name {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.quota-meter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.quota-meter-label {
+  color: #94a3b8;
+}
+
+.quota-steps {
+  display: flex;
+  gap: 4px;
+}
+
+.quota-pill {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: #272a3a;
+  border: 1px solid #3d435c;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.quota-pill.filled {
+  background-color: #10b981;
+  border-color: #34d399;
+  color: #ffffff;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.4);
+}
+
+.quota-fraction {
+  font-size: 12px;
+  color: #e2e8f0;
+}
+
+.quota-tip-dim {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.quota-tip-ok {
+  color: #38bdf8;
+  font-size: 11px;
+}
+
+.quota-tip-success {
+  color: #10b981;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.btn-turn-action {
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 6px;
+  background-color: #334155;
+  color: #94a3b8;
+  border: 1px solid #475569;
+  transition: all 0.2s;
+}
+
+.btn-turn-action.btn-ready {
+  background: linear-gradient(135deg, #0284c7, #2563eb);
+  color: #ffffff;
+  border-color: #38bdf8;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+}
+
+.btn-turn-action.btn-ready:hover {
+  background: linear-gradient(135deg, #0369a1, #1d4ed8);
+  transform: translateY(-1px);
+}
+
+.btn-turn-action.btn-full {
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: #ffffff;
+  border-color: #34d399;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+  animation: pulseButton 1.5s infinite;
+}
+
+@keyframes pulseButton {
+  0% { box-shadow: 0 0 8px rgba(16, 185, 129, 0.4); }
+  50% { box-shadow: 0 0 16px rgba(16, 185, 129, 0.75); }
+  100% { box-shadow: 0 0 8px rgba(16, 185, 129, 0.4); }
+}
+
+.btn-outline-danger {
+  background-color: transparent;
+  border: 1px solid #ef4444;
+  color: #f87171;
+}
+
+.btn-outline-danger:hover {
+  background-color: rgba(239, 68, 68, 0.15);
+}
+
+.mode-toggle-btn {
+  background-color: #242838;
+  border: 1px solid #3a425b;
+  color: #94a3b8;
+}
+
+.mode-toggle-btn.active {
+  background-color: #1e3a8a;
+  border-color: #3b82f6;
+  color: #bfdbfe;
+}
+
+/* 序列步骤中的玩家标签 */
+.step-player-tag {
+  font-size: 10px;
+  font-weight: 700;
+  color: #ffffff;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-right: 3px;
+  letter-spacing: 0.02em;
+}
+
+/* 侧边栏中的玩家标签 */
+.item-player-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  border: 1px solid;
+  margin-left: auto;
+  margin-right: 4px;
 }
 
 /* ==================== 点开顺序序列工具栏 ==================== */
@@ -2366,9 +3460,20 @@ select {
   font-size: 14px;
 }
 
+/* 工作区横向主体布局：主舞台与右侧侧边栏 */
+.workspace-layout {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
 /* 舞台视口滚动容器 */
 .stage-viewport {
   flex: 1;
+  min-width: 0;
   overflow: auto;
   position: relative;
   background-color: #0f1015;
@@ -2376,6 +3481,695 @@ select {
   flex-direction: column;
   align-items: center;
   padding: 24px 20px;
+}
+
+/* ==================== 侧边栏：已高亮词汇/字符面板 ==================== */
+.highlight-sidebar {
+  width: 340px;
+  min-width: 300px;
+  max-width: 440px;
+  background-color: #181a24;
+  border-left: 1px solid #2d3142;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  z-index: 20;
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.3);
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background-color: #1f2333;
+  border-bottom: 1px solid #2d3142;
+}
+
+.sidebar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-icon {
+  font-size: 16px;
+}
+
+.sidebar-title h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.sidebar-badge {
+  background-color: #0ea5e9;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+}
+
+.sidebar-close-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.sidebar-close-btn:hover {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 侧边栏内的玩家与回合制板块 */
+.sidebar-turn-section {
+  border-bottom: 1px solid #282c3d;
+  background-color: #151722;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-turn-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background-color: #191c28;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid #25293a;
+  transition: background-color 0.15s;
+}
+
+.sidebar-turn-header:hover {
+  background-color: #202434;
+}
+
+.sidebar-turn-header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.sidebar-mini-pill {
+  font-size: 10px;
+  font-weight: 700;
+  color: #ffffff;
+  padding: 1px 7px;
+  border-radius: 10px;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
+}
+
+.mini-collapse-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.sidebar-turn-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sidebar-turn-card {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.sidebar-turn-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sidebar-round-tag {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.sidebar-round-tag strong {
+  color: #f59e0b;
+  font-size: 13px;
+}
+
+.mini-mode-btn {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: #222638;
+  border: 1px solid #373f5a;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mini-mode-btn.active {
+  background-color: #1e3a8a;
+  border-color: #3b82f6;
+  color: #bfdbfe;
+}
+
+.sidebar-active-player-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-active-avatar {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.sidebar-active-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-active-name {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-active-quota-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.quota-mini-label {
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.sidebar-quota-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.sidebar-quota-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: #272a3a;
+  border: 1px solid #3d435c;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.sidebar-quota-dot.filled {
+  background-color: #10b981;
+  border-color: #34d399;
+  color: #ffffff;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.4);
+}
+
+.sidebar-quota-text {
+  font-size: 11px;
+  color: #e2e8f0;
+}
+
+.sidebar-turn-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-end-turn-btn {
+  flex: 1;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background-color: #334155;
+  color: #94a3b8;
+  border: 1px solid #475569;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.sidebar-end-turn-btn.btn-ready {
+  background: linear-gradient(135deg, #0284c7, #2563eb);
+  color: #ffffff;
+  border-color: #38bdf8;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+}
+
+.sidebar-end-turn-btn.btn-ready:hover {
+  background: linear-gradient(135deg, #0369a1, #1d4ed8);
+}
+
+.sidebar-end-turn-btn.btn-full {
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: #ffffff;
+  border-color: #34d399;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+  animation: pulseButton 1.5s infinite;
+}
+
+.sidebar-cancel-turn-btn {
+  font-size: 11px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.sidebar-players-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sidebar-players-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sidebar-section-subtitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.sidebar-players-chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(95px, 1fr));
+  gap: 5px;
+}
+
+.sidebar-player-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background-color: #1f2333;
+  border: 1px solid #2e344a;
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.sidebar-player-chip:hover {
+  background-color: #272d42;
+  border-color: #3d4666;
+  transform: translateY(-1px);
+}
+
+.sidebar-player-chip.is-current {
+  border-color: #38bdf8;
+  background-color: rgba(56, 189, 248, 0.12);
+  font-weight: 700;
+}
+
+.sidebar-player-chip.is-filtered {
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);
+}
+
+.sidebar-chip-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #e2e8f0;
+  font-size: 11px;
+}
+
+.sidebar-chip-count {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.sidebar-chip-turn-tag {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 0 3px;
+  border-radius: 3px;
+  background-color: #38bdf8;
+  color: #0f172a;
+}
+
+.sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid #2d3142;
+  background-color: #14161f;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.tab-btn:hover {
+  color: #cbd5e1;
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.tab-btn.active {
+  color: #38bdf8;
+  border-bottom-color: #38bdf8;
+  background-color: rgba(56, 189, 248, 0.08);
+}
+
+.sidebar-filter-bar {
+  padding: 10px 12px;
+  border-bottom: 1px solid #282c3d;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background-color: #1a1d29;
+}
+
+.sidebar-player-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.player-filter-label {
+  font-size: 11px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.player-filter-chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.player-filter-btn {
+  background-color: #161822;
+  border: 1px solid #33394f;
+  color: #94a3b8;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+
+.player-filter-btn:hover {
+  background-color: #222638;
+  color: #e2e8f0;
+}
+
+.player-filter-btn.active {
+  background-color: #2563eb;
+  border-color: #38bdf8;
+  color: #ffffff;
+}
+
+.filter-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sidebar-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-search-box .search-icon {
+  position: absolute;
+  left: 8px;
+  font-size: 12px;
+  color: #64748b;
+  pointer-events: none;
+}
+
+.sidebar-search-input {
+  width: 100%;
+  padding: 5px 28px 5px 26px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid #33394f;
+  background-color: #12141c;
+  color: #e2e8f0;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.sidebar-search-input:focus {
+  border-color: #38bdf8;
+}
+
+.clear-search-btn {
+  position: absolute;
+  right: 6px;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.sidebar-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sidebar-sort-select {
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background-color: #12141c;
+  border: 1px solid #33394f;
+  color: #cbd5e1;
+  outline: none;
+}
+
+.sidebar-quick-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.sidebar-list-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 16px;
+  text-align: center;
+  color: #64748b;
+}
+
+.sidebar-empty .empty-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.sidebar-empty p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background-color: #1f2333;
+  border: 1px solid #2d3348;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.sidebar-item:hover {
+  background-color: #272c40;
+  border-color: #3f4765;
+  transform: translateX(-2px);
+}
+
+.sidebar-item.is-hovered {
+  outline: 2px solid #f59e0b;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+}
+
+.sidebar-item.is-highlighted {
+  border-color: #38bdf8;
+  background-color: rgba(56, 189, 248, 0.12);
+}
+
+.item-type-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.badge-word {
+  background-color: #3b82f6;
+  color: #ffffff;
+}
+
+.badge-char {
+  background-color: #8b5cf6;
+  color: #ffffff;
+}
+
+.item-text {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: #f1f5f9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'Noto Sans SC', 'PingFang SC', monospace, sans-serif;
+}
+
+.item-player-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid;
+  max-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.item-count {
+  font-size: 11px;
+  color: #94a3b8;
+  font-family: monospace;
+  background-color: #12141c;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.item-remove-btn {
+  background: none;
+  border: none;
+  color: #f87171;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.item-remove-btn:hover {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+.item-add-btn {
+  background: none;
+  border: none;
+  color: #38bdf8;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.item-add-btn:hover {
+  background-color: rgba(56, 189, 248, 0.2);
+  color: #0ea5e9;
+}
+
+.sidebar-footer {
+  padding: 8px 12px;
+  border-top: 1px solid #282c3d;
+  background-color: #14161f;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.sidebar-footer .coverage-percent {
+  color: #10b981;
+  font-size: 12px;
+}
+
+.sidebar-footer .dim-stat {
+  color: #64748b;
 }
 
 /* 拖拽上传覆盖层 */
@@ -2489,7 +4283,7 @@ select {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 16px 48px;
+  padding: 40px 80px;
   line-height: 1.8;
   letter-spacing: 0.06em;
   box-sizing: border-box;
@@ -2584,7 +4378,7 @@ select {
   margin-block-start: 0;
   font-size: 45px;
   font-weight: 700;
-  margin-bottom: 8px;
+  margin-bottom: 20px;
   padding-bottom: 0;
   border-bottom: none;
   display: block;
@@ -2597,12 +4391,15 @@ select {
   line-height: 1.9;
   display: block;
   text-align: inherit;
+  column-fill: balance;
 }
 
 /* 标点符号 */
 .char-symbol {
   display: inline-block;
   vertical-align: middle;
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
 }
 
 /* 斜杠全宽方格样式 (与字块方格 1.25em 对齐居中) */
@@ -2616,64 +4413,32 @@ select {
   font-family: 'Noto Serif', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Source Han Sans SC', sans-serif;
   font-weight: 700;
   box-sizing: border-box;
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
 }
 
-/* 空格全宽方格占位 (与字块方格 1.25em 保持完全相同尺寸与对齐，作为符号默认直接显示) */
+/* 空格占位 (作为符号默认直接显示) */
 .char-symbol.is-space {
   display: inline-block;
-  width: 1.25em;
-  min-width: 1.25em;
-  max-width: 1.25em;
+  width: 0.5em;
+  min-width: 0.5em;
+  max-width: 0.5em;
   height: 1.25em;
   line-height: 1.25;
   text-align: center;
   vertical-align: middle;
   box-sizing: border-box;
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
 }
 
-/* 呈现区字符方块 (Black Square Mask) */
-.char-block {
-  font-family: 'Noto Serif', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Source Han Sans SC', sans-serif;
-  display: inline-block;
-  width: 1.25em;
-  height: 1.25em;
-  line-height: 1.25;
-  text-align: center;
-  vertical-align: middle;
-  cursor: pointer;
-  border-radius: 2px;
-  position: relative;
-  font-weight: 700;
-  box-sizing: border-box;
-}
-
-.char-block.hidden {
-  background-color: #1e1e1e;
-  color: transparent;
-}
-
-.char-block.hidden:hover {
-  background-color: #4a4a4a;
-  transform: scale(1.1);
-}
-
-.char-block.revealed {
-  background-color: transparent;
-  color: #1e1e1e;
-  animation: none;
-  transform: none;
-  transition: none;
-}
-
-.char-block.revealed:hover {
-  opacity: 0.8;
-}
-
-/* 上帝视角参考区字符 (God Char Block) */
+/* 上帝视角单元格 (God Unit Block) */
 .god-char-block {
   font-family: 'Noto Serif', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Source Han Sans SC', sans-serif;
   display: inline-block;
-  width: 1.25em;
+  min-width: 1.25em;
+  width: auto;
+  padding: 0 0.15em;
   height: 1.25em;
   line-height: 1.25;
   text-align: center;
@@ -2682,22 +4447,36 @@ select {
   border-radius: 3px;
   position: relative;
   box-sizing: border-box;
+  white-space: nowrap;
+  user-select: none;
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  page-break-inside: avoid;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s, transform 0.15s;
 }
 
-/* 参考区未揭示字符：柔和底色，字体清晰可见 */
+.god-char-block.is-word {
+  padding: 0 0.35em;
+  letter-spacing: 0.02em;
+}
+
+/* 未高亮单元：柔和底色，字体清晰可见 */
+.god-char-block.is-unselected,
 .god-char-block.is-hidden {
   background-color: #f1f5f9;
   color: #64748b;
   border: 1px solid #cbd5e1;
 }
 
+.god-char-block.is-unselected:hover,
 .god-char-block.is-hidden:hover {
   background-color: #e2e8f0;
   color: #1e293b;
-  transform: scale(1.1);
+  transform: scale(1.08);
 }
 
-/* 参考区已揭示字符：高亮绿/蓝显示 */
+/* 已高亮单元：高亮蓝显示 */
+.god-char-block.is-highlighted,
 .god-char-block.is-revealed {
   background-color: #e0f2fe;
   color: #0284c7;
@@ -2706,19 +4485,19 @@ select {
   box-shadow: 0 1px 3px rgba(2, 132, 199, 0.15);
 }
 
+.god-char-block.is-highlighted:hover,
 .god-char-block.is-revealed:hover {
   background-color: #bae6fd;
-  transform: scale(1.1);
+  transform: scale(1.08);
 }
 
 /* 悬停匹配全篇高亮 (金色光晕) */
-.char-block.is-hover-match,
 .god-char-block.is-hover-match {
   outline: 2px solid #f59e0b !important;
   outline-offset: 1px !important;
   box-shadow: 0 0 10px rgba(245, 158, 11, 0.7) !important;
   z-index: 50 !important;
-  transform: scale(1.12) !important;
+  transform: scale(1.1) !important;
 }
 
 /* ==================== 录屏主题定制 ==================== */
@@ -2726,92 +4505,92 @@ select {
 /* 1. 经典白底 (Light) */
 .god-mode-view.theme-light .screen-box-1080p {
   background-color: #ffffff;
+  color: #0f172a;
 }
-.god-mode-view.theme-light .up-part {
-  background-color: #ffffff;
-  color: #1e1e1e;
+.god-mode-view.theme-light .god-char-block.is-unselected,
+.god-mode-view.theme-light .god-char-block.is-hidden {
+  background-color: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
 }
-.god-mode-view.theme-light .down-part {
-  background-color: #f8fafc;
-  color: #334155;
+.god-mode-view.theme-light .god-char-block.is-highlighted,
+.god-mode-view.theme-light .god-char-block.is-revealed {
+  background-color: #e0f2fe;
+  color: #0284c7;
+  border-color: #7dd3fc;
 }
 
 /* 2. 暗黑模式 (Dark) */
 .god-mode-view.theme-dark .screen-box-1080p {
   background-color: #121216;
+  color: #f1f5f9;
   border-color: #2a2a36;
 }
-.god-mode-view.theme-dark .up-part {
-  background-color: #121216;
-  color: #f1f5f9;
-}
-.god-mode-view.theme-dark .up-part .char-block.hidden {
-  background-color: #2d2d38;
-}
-.god-mode-view.theme-dark .up-part .char-block.hidden:hover {
-  background-color: #3f3f4e;
-}
-.god-mode-view.theme-dark .up-part .char-block.revealed {
-  color: #f8fafc;
-}
-.god-mode-view.theme-dark .down-part {
-  background-color: #181820;
-  color: #e2e8f0;
-}
-.god-mode-view.theme-dark .down-part .god-char-block.is-hidden {
+.god-mode-view.theme-dark .god-char-block.is-unselected,
+.god-mode-view.theme-dark .god-char-block.is-hidden {
   background-color: #242430;
   color: #94a3b8;
-  border-color: #333344;
+  border: 1px solid #333344;
 }
-.god-mode-view.theme-dark .down-part .god-char-block.is-revealed {
+.god-mode-view.theme-dark .god-char-block.is-highlighted,
+.god-mode-view.theme-dark .god-char-block.is-revealed {
   background-color: #0369a1;
   color: #ffffff;
   border-color: #38bdf8;
 }
 
 /* 3. 绿幕抠像模式 (Chroma Green) */
-.god-mode-view.theme-green .up-part {
+.god-mode-view.theme-green .screen-box-1080p {
   background-color: #00ff00 !important;
   color: #000000;
 }
-.god-mode-view.theme-green .up-part .char-block.hidden {
-  background-color: #000000;
+.god-mode-view.theme-green .god-char-block.is-unselected,
+.god-mode-view.theme-green .god-char-block.is-hidden {
+  background-color: #ffffff;
+  color: #334155;
+  border: 1px solid #94a3b8;
 }
-.god-mode-view.theme-green .up-part .char-block.revealed {
-  color: #000000;
-}
-.god-mode-view.theme-green .down-part {
-  background-color: #f8fafc;
-  color: #1e293b;
+.god-mode-view.theme-green .god-char-block.is-highlighted,
+.god-mode-view.theme-green .god-char-block.is-revealed {
+  background-color: #0284c7;
+  color: #ffffff;
+  border-color: #0369a1;
 }
 
 /* 4. 蓝幕抠像模式 (Chroma Blue) */
-.god-mode-view.theme-blue .up-part {
+.god-mode-view.theme-blue .screen-box-1080p {
   background-color: #0000ff !important;
   color: #ffffff;
 }
-.god-mode-view.theme-blue .up-part .char-block.hidden {
+.god-mode-view.theme-blue .god-char-block.is-unselected,
+.god-mode-view.theme-blue .god-char-block.is-hidden {
   background-color: #ffffff;
-}
-.god-mode-view.theme-blue .up-part .char-block.revealed {
-  color: #ffffff;
-}
-.god-mode-view.theme-blue .down-part {
-  background-color: #f8fafc;
   color: #1e293b;
+  border: 1px solid #94a3b8;
+}
+.god-mode-view.theme-blue .god-char-block.is-highlighted,
+.god-mode-view.theme-blue .god-char-block.is-revealed {
+  background-color: #facc15;
+  color: #000000;
+  border-color: #eab308;
 }
 
 /* 5. 透明背景模式 (Transparent) */
 .god-mode-view.theme-transparent .screen-box-1080p {
-  background-color: transparent;
-}
-.god-mode-view.theme-transparent .up-part {
   background-color: transparent !important;
-  color: #1e1e1e;
+  color: #0f172a;
 }
-.god-mode-view.theme-transparent .down-part {
-  background-color: #ffffff;
-  color: #1e293b;
+.god-mode-view.theme-transparent .god-char-block.is-unselected,
+.god-mode-view.theme-transparent .god-char-block.is-hidden {
+  background-color: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+.god-mode-view.theme-transparent .god-char-block.is-highlighted,
+.god-mode-view.theme-transparent .god-char-block.is-revealed {
+  background-color: #e0f2fe;
+  color: #0284c7;
+  border-color: #7dd3fc;
 }
 
 
